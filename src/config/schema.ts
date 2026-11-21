@@ -18,9 +18,17 @@ const server = z.strictObject({
   port: z.int().min(0).max(65_535).default(3000),
 });
 
+const chat = z.strictObject({
+  // Chat from these players is marked as trusted. The mark informs the agent and enforces nothing.
+  trustedSenders: z.array(z.string().min(1)).default([]),
+});
+
 const events = z.strictObject({
   // Events kept per kind.
   capacity: z.int().min(1).default(256),
+  // Air and food are reported once they fall to these levels. Both run from 0 to 20.
+  oxygenAtMost: z.int().min(0).max(20).default(10),
+  foodAtMost: z.int().min(0).max(20).default(6),
 });
 
 const actions = z.strictObject({
@@ -31,6 +39,7 @@ const actions = z.strictObject({
 export const configSchema = z.strictObject({
   minecraft,
   server: server.prefault({}),
+  chat: chat.prefault({}),
   events: events.prefault({}),
   actions: actions.prefault({}),
   // The ways events reach the agent.

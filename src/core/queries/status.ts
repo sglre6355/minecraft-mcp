@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { airLevel } from "../events/oxygen.ts";
 import { defineQuery } from "./query.ts";
 
 export const status = defineQuery({
@@ -8,8 +9,6 @@ export const status = defineQuery({
   input: z.object({}),
   run({ bot }) {
     const { x, y, z: zCoordinate } = bot.entity.position;
-    // Mineflayer leaves `oxygenLevel` unset until the server reports a change in air.
-    const oxygen: number | undefined = bot.oxygenLevel;
     return Promise.resolve({
       username: bot.username,
       position: { x, y, z: zCoordinate },
@@ -19,7 +18,7 @@ export const status = defineQuery({
       health: bot.health,
       food: bot.food,
       saturation: bot.foodSaturation,
-      oxygen: oxygen ?? 20,
+      oxygen: airLevel(bot.oxygenLevel),
     });
   },
 });
