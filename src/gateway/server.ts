@@ -25,10 +25,9 @@ export function createServer({ core, log, deliveries }: ServerParts): McpServer 
     server.registerTool(
       tool.name,
       {
-        description: tool.description,
+        description: describe(tool),
         inputSchema: describedBy(tool.inputSchema),
         annotations: { readOnlyHint: tool.kind === "query" },
-        _meta: tool.progressSchema === undefined ? {} : { progressSchema: tool.progressSchema },
       },
       async (input) => toToolResult(await core.call(tool.name, input)),
     );
@@ -37,6 +36,17 @@ export function createServer({ core, log, deliveries }: ServerParts): McpServer 
     delivery.attach(server, log);
   }
   return server;
+}
+
+// MCP has no field for the shape of progress, so the description carries it to the model.
+function describe(tool: ToolDescriptor): string {
+  if (tool.progressSchema === undefined) {
+    return tool.description;
+  }
+  const schema = JSON.stringify(tool.progressSchema, (key, value: unknown) =>
+    key === "$schema" ? undefined : value,
+  );
+  return `${tool.description}\nWhile it runs, it reports progress as JSON that follows this schema. ${schema}`;
 }
 
 // Shows the schema to the client and lets every input through.

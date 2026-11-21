@@ -32,6 +32,7 @@ describe("configSchema", () => {
       server: { host: "127.0.0.1", port: 3000 },
       events: { capacity: 256 },
       actions: { waitMs: 10_000 },
+      delivery: ["poll-tool"],
       plugins: [],
     });
   });

@@ -1,10 +1,13 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 
 import type { Config } from "../config/schema.ts";
+import type { Delivery } from "./delivery/delivery.ts";
+import type { ServerParts } from "./server.ts";
 
 import { log } from "../log.ts";
 import { createAuthGate } from "./auth.ts";
 import { EventLog } from "./delivery/event-log.ts";
+import { pollTool } from "./delivery/poll-tool/poll-tool.ts";
 import { createServer } from "./server.ts";
 import { Supervisor } from "./supervisor.ts";
 
@@ -16,6 +19,13 @@ export interface ServeOptions {
 export interface Running {
   url: URL;
   stop(): Promise<void>;
+}
+
+function createDelivery(name: Config["delivery"][number], supervisor: Supervisor): Delivery {
+  switch (name) {
+    case "poll-tool":
+      return pollTool(() => supervisor.eventKinds);
+  }
 }
 
 export async function serve({ config, token }: ServeOptions): Promise<Running> {
@@ -30,14 +40,24 @@ export async function serve({ config, token }: ServeOptions): Promise<Running> {
   });
   await supervisor.start();
 
-  const handler = createMcpHandler(
-    () => createServer({ core: supervisor, log: events, deliveries: [] }),
-    {
-      onerror: (error) => {
-        log("error", "mcp", error.message);
-      },
+  const parts: ServerParts = {
+    core: supervisor,
+    log: events,
+    deliveries: [...new Set(config.delivery)].map((name) => createDelivery(name, supervisor)),
+  };
+  try {
+    // A tool name claimed twice fails here, at startup, instead of on every request.
+    createServer(parts);
+  } catch (error) {
+    supervisor.stop();
+    throw error;
+  }
+
+  const handler = createMcpHandler(() => createServer(parts), {
+    onerror: (error) => {
+      log("error", "mcp", error.message);
     },
-  );
+  });
   const gate = createAuthGate(token);
 
   const http = Bun.serve({

@@ -33,6 +33,8 @@ export const configSchema = z.strictObject({
   server: server.prefault({}),
   events: events.prefault({}),
   actions: actions.prefault({}),
+  // The ways events reach the agent.
+  delivery: z.array(z.enum(["poll-tool"])).default(["poll-tool"]),
   plugins: z.array(z.string().min(1)).default([]),
 });
 
