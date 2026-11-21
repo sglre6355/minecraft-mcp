@@ -20,6 +20,7 @@ const coreRestarted: EventKindDescriptor = {
   payloadSchema: z.toJSONSchema(restartedPayload),
   paramsSchema: z.toJSONSchema(z.object({})),
   filters: [],
+  optIn: false,
 };
 
 export interface SupervisorOptions {

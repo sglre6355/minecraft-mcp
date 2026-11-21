@@ -28,4 +28,6 @@ export interface EventKindDescriptor {
   payloadSchema: JsonSchema;
   paramsSchema: JsonSchema;
   filters: Array<EventFilterDescriptor>;
+  // An opt-in kind reaches only a subscription that names it.
+  optIn: boolean;
 }

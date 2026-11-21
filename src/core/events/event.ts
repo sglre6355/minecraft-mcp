@@ -10,8 +10,11 @@ export interface EventKindDefinition<Payload extends JsonObject> {
   description: string;
   payload: z.ZodType<Payload>;
   // Arguments a subscription may pass, and how each one narrows the events delivered.
-  params?: z.ZodType<JsonObject>;
+  params?: z.ZodType;
   filters?: Array<EventFilterDescriptor>;
+  // Set for a kind so frequent that it would drown the others. It then reaches only a
+  // subscription that names it.
+  optIn?: boolean;
 }
 
 export function defineEventKind<Payload extends JsonObject>(
@@ -44,7 +47,8 @@ export function describeEventKind(
     kind: definition.kind,
     description: definition.description,
     payloadSchema: z.toJSONSchema(definition.payload),
-    paramsSchema: z.toJSONSchema(definition.params ?? z.object({})),
+    paramsSchema: z.toJSONSchema(definition.params ?? z.object({}), { io: "input" }),
     filters: definition.filters ?? [],
+    optIn: definition.optIn ?? false,
   };
 }

@@ -2,6 +2,7 @@ import type { JsonObject, JsonValue } from "type-fest";
 
 import { z } from "zod";
 
+import type { EventFilterDescriptor } from "../protocol/descriptors.ts";
 import type { Body, BodyHolder, BodyLease } from "./body.ts";
 import type { Emit, EventKindDefinition } from "./events/event.ts";
 
@@ -11,34 +12,52 @@ import { defineEventKind } from "./events/event.ts";
 const identity = { actionId: z.string(), name: z.string() };
 const progressData: z.ZodType<JsonObject> = z.record(z.string(), z.json());
 
+// A subscription can ask for the events of one action.
+const params = z.object({
+  actionId: z.string().optional().describe("Only events of this action."),
+});
+const filters: Array<EventFilterDescriptor> = [{ param: "actionId", field: "actionId", op: "eq" }];
+
 export const started = defineEventKind({
   kind: "action.started",
   description: "An action began.",
   payload: z.object(identity),
+  params,
+  filters,
 });
 
 export const progressed = defineEventKind({
   kind: "action.progress",
-  description: "A running action reported how far it has come.",
+  description:
+    "A running action reported how far it has come. The latest report is also available from action_status.",
   payload: z.object({ ...identity, data: progressData }),
+  params,
+  filters,
+  optIn: true,
 });
 
 export const completed = defineEventKind({
   kind: "action.completed",
   description: "An action finished. Its output is available from action_status.",
   payload: z.object(identity),
+  params,
+  filters,
 });
 
 export const failed = defineEventKind({
   kind: "action.failed",
   description: "An action ended with an error.",
   payload: z.object({ ...identity, message: z.string() }),
+  params,
+  filters,
 });
 
 export const interrupted = defineEventKind({
   kind: "action.interrupted",
   description:
     "An action was stopped before it finished. `stopped` is false when the action ignored the order to stop and may still be moving the bot.",
+  params,
+  filters,
   payload: z.object({
     ...identity,
     by: z.enum(["agent", "reflex", "disconnect"]),
