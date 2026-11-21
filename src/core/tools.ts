@@ -3,11 +3,13 @@ import type { JsonObject, JsonValue } from "type-fest";
 
 import { z } from "zod";
 
+import type { Config } from "../config/schema.ts";
 import type { JsonSchema, ToolDescriptor } from "../protocol/descriptors.ts";
 import type { CallResult } from "../protocol/messages.ts";
 import type { ActionReport, ActionRunner } from "./action-runner.ts";
 import type { ActionDefinition } from "./actions/action.ts";
 import type { BodyHolder } from "./body.ts";
+import type { CommandDefinition } from "./commands/command.ts";
 import type { Emit } from "./events/event.ts";
 import type { Registry } from "./plugins.ts";
 import type { QueryDefinition } from "./queries/query.ts";
@@ -23,6 +25,7 @@ export interface ToolParts {
   registry: Registry;
   runner: ActionRunner;
   emit: Emit;
+  config: Config;
   // The bot while it is in the Minecraft server.
   bot: () => Bot | undefined;
 }
@@ -32,6 +35,9 @@ export function buildTools(parts: ToolParts): Map<string, Tool> {
   const tools = new Map<string, Tool>();
   for (const query of parts.registry.queries.values()) {
     tools.set(query.name, queryTool(query, parts));
+  }
+  for (const command of parts.registry.commands.values()) {
+    tools.set(command.name, commandTool(command, parts));
   }
   for (const action of parts.registry.actions.values()) {
     tools.set(action.name, actionTool(action, parts));
@@ -72,6 +78,31 @@ function queryTool(query: QueryDefinition<unknown, JsonValue>, { bot }: ToolPart
         return notConnected;
       }
       return { ok: true, output: await query.run({ bot: current }, parsed.data) };
+    },
+  };
+}
+
+function commandTool(
+  command: CommandDefinition<unknown, JsonValue>,
+  { bot, config }: ToolParts,
+): Tool {
+  return {
+    descriptor: {
+      kind: "command",
+      name: command.name,
+      description: command.description,
+      inputSchema: z.toJSONSchema(command.input, { io: "input" }),
+    },
+    async call(input) {
+      const parsed = await command.input.safeParseAsync(input);
+      if (!parsed.success) {
+        return invalidInput(z.prettifyError(parsed.error));
+      }
+      const current = bot();
+      if (current === undefined) {
+        return notConnected;
+      }
+      return { ok: true, output: await command.run({ bot: current, config }, parsed.data) };
     },
   };
 }

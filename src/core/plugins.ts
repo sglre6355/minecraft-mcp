@@ -3,6 +3,7 @@ import type { JsonObject, JsonValue } from "type-fest";
 import { z } from "zod";
 
 import type { ActionDefinition } from "./actions/action.ts";
+import type { CommandDefinition } from "./commands/command.ts";
 import type { EventKindDefinition, EventSourceDefinition } from "./events/event.ts";
 import type { Plugin } from "./plugin-api.ts";
 import type { QueryDefinition } from "./queries/query.ts";
@@ -11,40 +12,44 @@ import type { Reflex } from "./reflexes/reflex.ts";
 export interface Registry {
   actions: Map<string, ActionDefinition<unknown, JsonValue, JsonObject>>;
   queries: Map<string, QueryDefinition<unknown, JsonValue>>;
+  commands: Map<string, CommandDefinition<unknown, JsonValue>>;
   reflexes: Map<string, Reflex<unknown, string>>;
   eventSources: Array<EventSourceDefinition>;
   eventKinds: Array<EventKindDefinition<JsonObject>>;
 }
 
-// Actions and queries share one namespace, since each becomes an MCP tool.
+// Actions, queries and commands share one namespace, since each becomes an MCP tool.
 export function buildRegistry(plugins: Array<Plugin>): Registry {
   const registry: Registry = {
     actions: new Map(),
     queries: new Map(),
+    commands: new Map(),
     reflexes: new Map(),
     eventSources: [],
     eventKinds: [],
   };
   const eventKindNames = new Set<string>();
+  const requireNewTool = (plugin: Plugin, name: string) => {
+    if (registry.actions.has(name) || registry.queries.has(name) || registry.commands.has(name)) {
+      throw new Error(`Plugin "${plugin.name}" defines the tool "${name}", which already exists`);
+    }
+  };
 
   for (const plugin of plugins) {
     for (const action of plugin.actions ?? []) {
-      if (registry.actions.has(action.name) || registry.queries.has(action.name)) {
-        throw new Error(
-          `Plugin "${plugin.name}" defines the tool "${action.name}", which already exists`,
-        );
-      }
+      requireNewTool(plugin, action.name);
       requireObjectInput(plugin, action);
       registry.actions.set(action.name, action);
     }
     for (const query of plugin.queries ?? []) {
-      if (registry.actions.has(query.name) || registry.queries.has(query.name)) {
-        throw new Error(
-          `Plugin "${plugin.name}" defines the tool "${query.name}", which already exists`,
-        );
-      }
+      requireNewTool(plugin, query.name);
       requireObjectInput(plugin, query);
       registry.queries.set(query.name, query);
+    }
+    for (const command of plugin.commands ?? []) {
+      requireNewTool(plugin, command.name);
+      requireObjectInput(plugin, command);
+      registry.commands.set(command.name, command);
     }
     for (const reflex of plugin.reflexes ?? []) {
       if (registry.reflexes.has(reflex.name)) {

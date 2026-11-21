@@ -131,7 +131,7 @@ async function init(config: Config): Promise<void> {
       reflexRunner.disconnected();
     },
   });
-  tools = buildTools({ registry, runner, emit, bot: () => connection.bot });
+  tools = buildTools({ registry, runner, emit, config, bot: () => connection.bot });
 
   const eventKinds = [
     ...connectionEventKinds,

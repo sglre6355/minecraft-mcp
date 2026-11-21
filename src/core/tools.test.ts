@@ -4,9 +4,10 @@ import { z } from "zod";
 import type { Emit } from "./events/event.ts";
 import type { Plugin, Reflex } from "./plugin-api.ts";
 
+import { configSchema } from "../config/schema.ts";
 import { ActionRunner } from "./action-runner.ts";
 import { Body } from "./body.ts";
-import { defineAction, definePlugin, defineQuery } from "./plugin-api.ts";
+import { defineAction, defineCommand, definePlugin, defineQuery } from "./plugin-api.ts";
 import { buildRegistry } from "./plugins.ts";
 import { buildTools } from "./tools.ts";
 
@@ -24,7 +25,8 @@ const drowning: Reflex<unknown, string> = {
 function build(plugin: Plugin) {
   const registry = buildRegistry([plugin]);
   const runner = new ActionRunner({ body: new Body(), emit: silent, waitMs: 10, stopGraceMs: 10 });
-  return buildTools({ registry, runner, emit: silent, bot: () => undefined });
+  const config = configSchema.parse({ minecraft: { host: "mc.example", username: "bot" } });
+  return buildTools({ registry, runner, emit: silent, config, bot: () => undefined });
 }
 
 function action(name: string, input: z.ZodType) {
@@ -38,6 +40,37 @@ async function call(tools: ReturnType<typeof build>, name: string, input: unknow
   }
   return await tool.call(input);
 }
+
+describe("a command tool", () => {
+  const say = defineCommand({
+    name: "say",
+    description: "",
+    input: z.object({ message: z.string() }),
+    run: () => Promise.resolve(null),
+  });
+
+  test("is offered as its own kind", () => {
+    const tools = build(definePlugin({ name: "a", commands: [say] }));
+
+    expect(tools.get("say")?.descriptor.kind).toBe("command");
+  });
+
+  test("rejects input that does not fit", async () => {
+    const tools = build(definePlugin({ name: "a", commands: [say] }));
+
+    const result = await call(tools, "say", { message: 5 });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+  });
+
+  test("needs the bot to be in the server", async () => {
+    const tools = build(definePlugin({ name: "a", commands: [say] }));
+
+    const result = await call(tools, "say", { message: "hi" });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "not_connected" } });
+  });
+});
 
 describe("buildTools", () => {
   test("offers the queries, the actions and the tools that manage actions", () => {

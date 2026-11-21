@@ -3,8 +3,8 @@ import type { z } from "zod";
 export type JsonSchema = z.core.JSONSchema.JSONSchema;
 
 export interface ToolDescriptor {
-  // A control tool manages running actions. It neither reads the world nor uses the body.
-  kind: "action" | "query" | "control";
+  // A command acts on the world without the body. A control tool manages running actions.
+  kind: "action" | "query" | "command" | "control";
   name: string;
   description: string;
   inputSchema: JsonSchema;

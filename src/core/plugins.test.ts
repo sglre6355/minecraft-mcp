@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 
-import { defineAction, defineEventKind, definePlugin, defineQuery } from "./plugin-api.ts";
+import {
+  defineAction,
+  defineCommand,
+  defineEventKind,
+  definePlugin,
+  defineQuery,
+} from "./plugin-api.ts";
 import { buildRegistry } from "./plugins.ts";
 
 function query(name: string) {
@@ -53,6 +59,22 @@ describe("buildRegistry", () => {
     ];
 
     expect(() => buildRegistry(plugins)).toThrow('Plugin "b" defines the tool "look"');
+  });
+
+  test("rejects a command that shares its name with an action or a query", () => {
+    const say = defineCommand({
+      name: "say",
+      description: "",
+      input: z.object({}),
+      run: () => Promise.resolve(null),
+    });
+
+    expect(() =>
+      buildRegistry([definePlugin({ name: "a", actions: [action("say")], commands: [say] })]),
+    ).toThrow('Plugin "a" defines the tool "say"');
+    expect(() =>
+      buildRegistry([definePlugin({ name: "a", commands: [say], queries: [query("say")] })]),
+    ).toThrow('Plugin "a" defines the tool "say"');
   });
 
   test("rejects a tool whose input is not an object", () => {
