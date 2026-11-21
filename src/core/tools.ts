@@ -81,7 +81,9 @@ const connectInput = z.strictObject({
   username: z
     .string()
     .min(1)
-    .describe("The name to join under. With Microsoft sign-in, the e-mail address of the account."),
+    .describe(
+      "With offline sign-in, the name the bot joins under. With Microsoft sign-in, a label for the saved sign-in. The account a person signs in with decides the name in the game, and the same label uses that sign-in again without asking.",
+    ),
   auth: z
     .enum(["offline", "microsoft"])
     .default("microsoft")
@@ -99,7 +101,7 @@ const connectInput = z.strictObject({
     ),
 });
 
-function connectTool({ presence, config }: ToolParts): Tool {
+function connectTool({ presence, config, bot }: ToolParts): Tool {
   return {
     descriptor: {
       kind: "control",
@@ -128,7 +130,8 @@ function connectTool({ presence, config }: ToolParts): Tool {
 
       const outcome = await within(presence.connect(target), config.actions.waitMs);
       if (outcome === undefined || outcome.state === "connected") {
-        return { ok: true, output: { state: presence.state } };
+        // The name in the game, which Microsoft sign-in takes from the account.
+        return { ok: true, output: { state: presence.state, username: bot()?.username ?? null } };
       }
       return {
         ok: false,

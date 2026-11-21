@@ -93,7 +93,7 @@ describe("connect and disconnect", () => {
 
     const result = await call(tools, "connect", home);
 
-    expect(result).toEqual({ ok: true, output: { state: "connecting" } });
+    expect(result).toEqual({ ok: true, output: { state: "connecting", username: null } });
   });
 
   test("refuse another server while the bot is set on one", async () => {
@@ -114,7 +114,7 @@ describe("connect and disconnect", () => {
 
     const result = await call(tools, "connect", { ...home, port: 25_565 });
 
-    expect(result).toEqual({ ok: true, output: { state: "connecting" } });
+    expect(result).toEqual({ ok: true, output: { state: "connecting", username: null } });
   });
 
   test("give up the attempt on disconnect, and report the failure to whoever waits", async () => {
