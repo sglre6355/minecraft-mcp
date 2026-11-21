@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 
+import type { Target } from "../protocol/messages.ts";
 import type { Emit } from "./events/event.ts";
 import type { Plugin, Reflex } from "./plugin-api.ts";
 
@@ -9,6 +10,7 @@ import { ActionRunner } from "./action-runner.ts";
 import { Body } from "./body.ts";
 import { defineAction, defineCommand, definePlugin, defineQuery } from "./plugin-api.ts";
 import { buildRegistry } from "./plugins.ts";
+import { Presence } from "./presence.ts";
 import { buildTools } from "./tools.ts";
 
 const silent: Emit = () => {};
@@ -25,9 +27,38 @@ const drowning: Reflex<unknown, string> = {
 function build(plugin: Plugin) {
   const registry = buildRegistry([plugin]);
   const runner = new ActionRunner({ body: new Body(), emit: silent, waitMs: 10, stopGraceMs: 10 });
-  const config = configSchema.parse({ minecraft: { host: "mc.example", username: "bot" } });
-  return buildTools({ registry, runner, emit: silent, config, bot: () => undefined });
+  const config = configSchema.parse({ actions: { waitMs: 20 } });
+  return buildTools({
+    registry,
+    runner,
+    emit: silent,
+    config,
+    presence: unreachable(),
+    bot: () => undefined,
+  });
 }
+
+// Never gets into a server. An attempt hangs until it is ended.
+function unreachable() {
+  return new Presence<Target>({
+    dial: (_target, _auto, events) => ({
+      hangUp: () => {
+        events.ended({ kind: "requested" });
+      },
+    }),
+    onDisconnected: () => {},
+    onTarget: () => {},
+    baseDelayMs: 10,
+    maxDelayMs: 10,
+    stableAfterMs: 10,
+  });
+}
+
+const lookQuery = {
+  description: "",
+  input: z.object({}),
+  run: () => Promise.resolve(null),
+};
 
 function action(name: string, input: z.ZodType) {
   return defineAction({ name, description: "", input, run: () => Promise.resolve(null) });
@@ -40,6 +71,78 @@ async function call(tools: ReturnType<typeof build>, name: string, input: unknow
   }
   return await tool.call(input);
 }
+
+describe("connect and disconnect", () => {
+  const home = { host: "mc.example", username: "bot" };
+
+  test("need a server and a name to join under", async () => {
+    const tools = build(definePlugin({ name: "a" }));
+
+    expect(await call(tools, "connect", {})).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" },
+    });
+    expect(await call(tools, "connect", { host: "mc.example" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" },
+    });
+  });
+
+  test("answer while the bot is still joining", async () => {
+    const tools = build(definePlugin({ name: "a" }));
+
+    const result = await call(tools, "connect", home);
+
+    expect(result).toEqual({ ok: true, output: { state: "connecting" } });
+  });
+
+  test("refuse another server while the bot is set on one", async () => {
+    const tools = build(definePlugin({ name: "a" }));
+    await call(tools, "connect", home);
+
+    const result = await call(tools, "connect", { host: "other.example", username: "bot" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining("Call disconnect first") },
+    });
+  });
+
+  test("take the same server again without a second attempt", async () => {
+    const tools = build(definePlugin({ name: "a" }));
+    await call(tools, "connect", home);
+
+    const result = await call(tools, "connect", { ...home, port: 25_565 });
+
+    expect(result).toEqual({ ok: true, output: { state: "connecting" } });
+  });
+
+  test("give up the attempt on disconnect, and report the failure to whoever waits", async () => {
+    const tools = build(definePlugin({ name: "a" }));
+    await call(tools, "connect", home);
+
+    const result = await call(tools, "disconnect", {});
+
+    expect(result).toEqual({ ok: true, output: { state: "disconnected", was: "connecting" } });
+  });
+
+  test("say what to do when a tool needs the bot in a server", async () => {
+    const tools = build(
+      definePlugin({ name: "a", queries: [defineQuery({ ...lookQuery, name: "look" })] }),
+    );
+
+    const result = await call(tools, "look", {});
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "not_connected",
+        message: expect.stringContaining("Call connect"),
+        details: { state: "disconnected" },
+      },
+    });
+  });
+});
 
 describe("a command tool", () => {
   const say = defineCommand({
@@ -94,6 +197,8 @@ describe("buildTools", () => {
     expect(kinds).toEqual([
       ["look", "query"],
       ["dig", "action"],
+      ["connect", "control"],
+      ["disconnect", "control"],
       ["action_status", "query"],
       ["cancel_action", "control"],
     ]);

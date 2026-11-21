@@ -14,11 +14,12 @@ afterEach(() => {
   supervisor = undefined;
 });
 
-function create(host = "localhost") {
+// The stand-in core reads how to behave from the list of plugins.
+function create(behavior = "run") {
   const events: Array<EventOccurrence> = [];
   supervisor = new Supervisor({
     workerUrl,
-    config: configSchema.parse({ minecraft: { host, username: "bot" } }),
+    config: configSchema.parse({ plugins: [behavior] }),
     onEvent: (event) => events.push(event),
     pingIntervalMs: 20,
     missedPingLimit: 10,
@@ -74,6 +75,29 @@ describe("Supervisor", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "core_unavailable" } });
     expect(events).toMatchObject([{ kind: "core.restarted", payload: { reason: "unresponsive" } }]);
     await until(async () => (await supervisor.call("echo", 1)).ok);
+  });
+
+  test("tells a recreated core which server the one before it was meant to be in", async () => {
+    const { supervisor, events } = create();
+    await supervisor.start();
+    expect(await supervisor.call("rejoin", {})).toEqual({ ok: true, output: null });
+    await supervisor.call("join", {});
+
+    await supervisor.call("crash", {});
+    await until(() => events.length > 0);
+    await until(async () => (await supervisor.call("rejoin", {})).ok);
+
+    expect(await supervisor.call("rejoin", {})).toEqual({
+      ok: true,
+      output: {
+        host: "mc.example",
+        port: 1,
+        username: "bot",
+        auth: "offline",
+        version: null,
+        resolveSrv: true,
+      },
+    });
   });
 
   test("recreates a core that crashes", async () => {

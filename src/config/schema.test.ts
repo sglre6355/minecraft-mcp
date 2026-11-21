@@ -18,17 +18,11 @@ describe("tokenSchema", () => {
 });
 
 describe("configSchema", () => {
-  test("fills in defaults around the required fields", () => {
-    const config = configSchema.parse({ minecraft: { host: "mc.example", username: "bot" } });
+  test("needs no setting at all", () => {
+    const config = configSchema.parse({});
 
     expect(config).toEqual({
-      minecraft: {
-        host: "mc.example",
-        port: 25_565,
-        username: "bot",
-        auth: "microsoft",
-        resolveSrv: true,
-      },
+      minecraft: {},
       server: { host: "127.0.0.1", port: 3000 },
       chat: { trustedSenders: [], allowCommands: false },
       events: { capacity: 256, oxygenAtMost: 10, foodAtMost: 6 },
@@ -41,23 +35,18 @@ describe("configSchema", () => {
 
   test("lets a reflex be switched off by name", () => {
     const config = configSchema.parse({
-      minecraft: { host: "mc.example", username: "bot" },
       reflexes: { drowning: { enabled: false }, fleeing: {} },
     });
 
     expect(config.reflexes).toEqual({ drowning: { enabled: false }, fleeing: { enabled: true } });
   });
 
-  test("requires the Minecraft server and the username", () => {
-    expect(configSchema.safeParse({}).success).toBe(false);
+  test("leaves the server to join out of the config, since the agent names it", () => {
     expect(configSchema.safeParse({ minecraft: { host: "mc.example" } }).success).toBe(false);
+    expect(configSchema.safeParse({ minecraft: { username: "bot" } }).success).toBe(false);
   });
 
   test("rejects a key it does not know", () => {
-    const result = configSchema.safeParse({
-      minecraft: { host: "mc.example", username: "bot", pport: 25_566 },
-    });
-
-    expect(result.success).toBe(false);
+    expect(configSchema.safeParse({ server: { pport: 3001 } }).success).toBe(false);
   });
 });

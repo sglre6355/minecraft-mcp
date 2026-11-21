@@ -1,6 +1,7 @@
-import type { CoreToGateway, GatewayToCore } from "../protocol/messages.ts";
+import type { CoreToGateway, GatewayToCore, Target } from "../protocol/messages.ts";
 
-// A stand-in core for the supervisor tests. The tool name selects the behaviour.
+// A stand-in core for the supervisor tests. The tool name selects the behavior of a call,
+// and the list of plugins in the config selects the behavior at startup.
 
 declare const self: Worker;
 
@@ -8,11 +9,15 @@ function post(message: CoreToGateway): void {
   self.postMessage(message);
 }
 
+// What this core was told to join again when it started.
+let rejoin: Target | null = null;
+
 self.addEventListener("message", (event: MessageEvent<GatewayToCore>) => {
   const message = event.data;
   switch (message.type) {
     case "init":
-      if (message.config.minecraft.host === "fail-to-start") {
+      rejoin = message.rejoin;
+      if (message.config.plugins.includes("fail-to-start")) {
         throw new Error("cannot start");
       }
       post({
@@ -20,7 +25,7 @@ self.addEventListener("message", (event: MessageEvent<GatewayToCore>) => {
         tools: [{ kind: "query", name: "echo", description: "", inputSchema: {} }],
         eventKinds: [],
       });
-      if (message.config.minecraft.host === "crash-after-ready") {
+      if (message.config.plugins.includes("crash-after-ready")) {
         setTimeout(() => {
           throw new Error("crashed after ready");
         }, 0);
@@ -37,6 +42,23 @@ self.addEventListener("message", (event: MessageEvent<GatewayToCore>) => {
       }
       if (message.tool === "crash") {
         throw new Error("crashed on request");
+      }
+      if (message.tool === "join") {
+        post({
+          type: "target",
+          target: {
+            host: "mc.example",
+            port: 1,
+            username: "bot",
+            auth: "offline",
+            version: null,
+            resolveSrv: true,
+          },
+        });
+      }
+      if (message.tool === "rejoin") {
+        post({ type: "result", id: message.id, result: { ok: true, output: rejoin } });
+        break;
       }
       if (message.tool === "emit") {
         post({

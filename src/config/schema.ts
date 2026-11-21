@@ -1,16 +1,9 @@
 import { z } from "zod";
 
+// Which server to join, and as whom, is the agent's to say when it connects.
 const minecraft = z.strictObject({
-  host: z.string().min(1),
-  port: z.int().min(1).max(65_535).default(25_565),
-  username: z.string().min(1),
-  auth: z.enum(["offline", "microsoft"]).default("microsoft"),
-  // Detected from the server when omitted.
-  version: z.string().min(1).optional(),
+  // Where sign-in tokens are kept between runs.
   profilesDirectory: z.string().min(1).optional(),
-  // Follows the DNS SRV record `_minecraft._tcp.<host>` to find the real address.
-  // When false, the bot connects straight to `host` and `port`.
-  resolveSrv: z.boolean().default(true),
 });
 
 const server = z.strictObject({
@@ -45,7 +38,7 @@ const reflexes = z.record(
 );
 
 export const configSchema = z.strictObject({
-  minecraft,
+  minecraft: minecraft.prefault({}),
   server: server.prefault({}),
   chat: chat.prefault({}),
   events: events.prefault({}),

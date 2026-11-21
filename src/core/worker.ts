@@ -1,7 +1,8 @@
 import type { Bot } from "mineflayer";
 
 import type { Config } from "../config/schema.ts";
-import type { CallResult, CoreToGateway, GatewayToCore } from "../protocol/messages.ts";
+import type { CallResult, CoreToGateway, GatewayToCore, Target } from "../protocol/messages.ts";
+import type { DialHooks } from "./connection.ts";
 import type { Emit, EventSourceDefinition } from "./events/event.ts";
 import type { Registry } from "./plugins.ts";
 import type { BoundReflex } from "./reflex-runner.ts";
@@ -12,9 +13,10 @@ import { log } from "../log.ts";
 import { ActionRunner, actionEventKinds } from "./action-runner.ts";
 import { Body } from "./body.ts";
 import { builtin } from "./builtin.ts";
-import { Connection, connectionEventKinds } from "./connection.ts";
+import { connectionEventKinds, dial, disconnected } from "./connection.ts";
 import { describeEventKind } from "./events/event.ts";
 import { buildRegistry, loadPlugins } from "./plugins.ts";
+import { describeCause, Presence } from "./presence.ts";
 import { ReflexRunner, reflexEventKinds } from "./reflex-runner.ts";
 import { buildTools } from "./tools.ts";
 
@@ -104,34 +106,72 @@ const reflexCheckMs = 100;
 
 let tools: Map<string, Tool> | undefined;
 
-async function init(config: Config): Promise<void> {
+// The waits between tries to join again, as for the core's restarts.
+const reconnectBaseMs = 1000;
+const reconnectMaxMs = 60_000;
+const stableAfterMs = 30_000;
+
+async function init(config: Config, rejoin: Target | null): Promise<void> {
   const loaded = buildRegistry([builtin, ...(await loadPlugins(config.plugins))]);
   const registry = { ...loaded, reflexes: enabledReflexes(loaded.reflexes, config.reflexes) };
   const body = new Body();
   const runner = new ActionRunner({ body, emit, waitMs: config.actions.waitMs, stopGraceMs });
   const reflexRunner = new ReflexRunner({ body, emit, stopGraceMs });
-  let stopEventSources: (() => void) | undefined;
-  let reflexChecks: ReturnType<typeof setInterval> | undefined;
-  const connection = new Connection(config.minecraft, emit, {
+
+  // The bot of the connection that is up, with what runs on it.
+  let present: { bot: Bot; stop: () => void } | undefined;
+  const hooks: DialHooks = {
     onSpawn: (bot) => {
       bot.on("death", () => {
         runner.died();
       });
-      stopEventSources = startEventSources(registry.eventSources, bot, config);
+      const stopEventSources = startEventSources(registry.eventSources, bot, config);
       const reflexes = [...registry.reflexes.values()].map((reflex) => bind(reflex, bot));
-      reflexChecks = setInterval(() => {
+      const reflexChecks = setInterval(() => {
         void reflexRunner.check(reflexes);
       }, reflexCheckMs);
+      present = {
+        bot,
+        stop: () => {
+          stopEventSources();
+          clearInterval(reflexChecks);
+        },
+      };
     },
-    onEnd: () => {
-      stopEventSources?.();
-      stopEventSources = undefined;
-      clearInterval(reflexChecks);
-      runner.disconnected();
-      reflexRunner.disconnected();
+    onEnd: (bot) => {
+      if (present?.bot === bot) {
+        present.stop();
+        present = undefined;
+        runner.disconnected();
+        reflexRunner.disconnected();
+      }
     },
+  };
+  const presence = new Presence<Target>({
+    dial: (target, auto, events) => dial(target, config.minecraft, auto, emit, hooks, events),
+    onDisconnected: (cause, retryInMs) => {
+      emit(disconnected, {
+        reason: describeCause(cause),
+        willReconnect: retryInMs !== null,
+        retryInSeconds: retryInMs === null ? null : retryInMs / 1000,
+      });
+    },
+    onTarget: (target) => {
+      post({ type: "target", target: target ?? null });
+    },
+    baseDelayMs: reconnectBaseMs,
+    maxDelayMs: reconnectMaxMs,
+    stableAfterMs,
   });
-  tools = buildTools({ registry, runner, emit, config, bot: () => connection.bot });
+  tools = buildTools({
+    registry,
+    runner,
+    emit,
+    config,
+    presence,
+    // A bot that is leaving is of no use to a tool.
+    bot: () => (presence.state === "connected" ? present?.bot : undefined),
+  });
 
   const eventKinds = [
     ...connectionEventKinds,
@@ -140,12 +180,15 @@ async function init(config: Config): Promise<void> {
     ...registry.eventKinds,
   ];
 
-  connection.connect();
   post({
     type: "ready",
     tools: [...tools.values()].map((tool) => tool.descriptor),
     eventKinds: eventKinds.map(describeEventKind),
   });
+  // The core before this one was in a server when it went down.
+  if (rejoin !== null) {
+    void presence.resume(rejoin);
+  }
 }
 
 async function call(name: string, input: unknown): Promise<CallResult> {
@@ -167,7 +210,7 @@ function errorMessage(error: unknown): string {
 async function handle(message: GatewayToCore): Promise<void> {
   switch (message.type) {
     case "init":
-      await init(message.config);
+      await init(message.config, message.rejoin);
       break;
     case "ping":
       post({ type: "pong" });

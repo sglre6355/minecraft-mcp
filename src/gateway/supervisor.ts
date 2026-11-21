@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Config } from "../config/schema.ts";
 import type { EventKindDescriptor, ToolDescriptor } from "../protocol/descriptors.ts";
 import type { EventOccurrence } from "../protocol/events.ts";
-import type { CallResult, CoreToGateway, GatewayToCore } from "../protocol/messages.ts";
+import type { CallResult, CoreToGateway, GatewayToCore, Target } from "../protocol/messages.ts";
 
 import { log } from "../log.ts";
 
@@ -59,6 +59,8 @@ export class Supervisor {
   #failuresInARow = 0;
   #tools: Array<ToolDescriptor> = [];
   #eventKinds: Array<EventKindDescriptor> = [coreRestarted];
+  // The server the bot is meant to be in. A core that is recreated joins it again.
+  #target: Target | null = null;
   #nextCallId = 1;
   readonly #pendingCalls = new Map<number, (result: CallResult) => void>();
   #started: PromiseWithResolvers<void> | undefined;
@@ -132,7 +134,7 @@ export class Supervisor {
     worker.addEventListener("close", () => {
       this.#recreate(worker, "crashed", "the worker exited");
     });
-    this.#post(worker, { type: "init", config: this.#config });
+    this.#post(worker, { type: "init", config: this.#config, rejoin: this.#target });
   }
 
   #post(worker: Worker, message: GatewayToCore): void {
@@ -160,6 +162,9 @@ export class Supervisor {
       }
       case "event":
         this.#onEvent(message.event);
+        break;
+      case "target":
+        this.#target = message.target;
         break;
     }
   }
