@@ -38,7 +38,8 @@ export async function serve({ config, token }: ServeOptions): Promise<Running> {
     config,
     onEvent: (event) => {
       events.append(event);
-      log("info", "event", event.kind, { payload: event.payload });
+      // The payload stays out of the log. It can hold what players wrote in chat.
+      log("info", "event", event.kind);
     },
   });
   await supervisor.start();

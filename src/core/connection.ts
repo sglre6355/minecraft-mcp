@@ -45,16 +45,23 @@ export const connectionError = defineEventKind({
 
 export const connectionEventKinds = [connected, disconnected, kicked, msaCode, connectionError];
 
+export interface ConnectionHooks {
+  // The bot joined the server and has a body in the world.
+  onSpawn: (bot: Bot) => void;
+  // The connection is gone, and with it the bot.
+  onEnd: () => void;
+}
+
 export class Connection {
   readonly #config: Config["minecraft"];
   readonly #emit: Emit;
-  readonly #onEnd: () => void;
+  readonly #hooks: ConnectionHooks;
   #bot: Bot | undefined;
 
-  constructor(config: Config["minecraft"], emit: Emit, onEnd: () => void) {
+  constructor(config: Config["minecraft"], emit: Emit, hooks: ConnectionHooks) {
     this.#config = config;
     this.#emit = emit;
-    this.#onEnd = onEnd;
+    this.#hooks = hooks;
   }
 
   // The bot, from the moment it spawns until the connection ends.
@@ -89,6 +96,7 @@ export class Connection {
     const bot = createBot(options);
     bot.once("spawn", () => {
       this.#bot = bot;
+      this.#hooks.onSpawn(bot);
       this.#emit(connected, { username: bot.username });
     });
     bot.on("kicked", (reason) => {
@@ -102,7 +110,7 @@ export class Connection {
     });
     bot.once("end", (reason) => {
       this.#bot = undefined;
-      this.#onEnd();
+      this.#hooks.onEnd();
       this.#emit(disconnected, { reason });
     });
   }

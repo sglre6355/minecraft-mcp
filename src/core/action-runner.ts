@@ -13,7 +13,7 @@ const identity = { actionId: z.string(), name: z.string() };
 const progressData: z.ZodType<JsonObject> = z.record(z.string(), z.json());
 
 // A subscription can ask for the events of one action.
-const params = z.object({
+const params = z.strictObject({
   actionId: z.string().optional().describe("Only events of this action."),
 });
 const filters: Array<EventFilterDescriptor> = [{ param: "actionId", field: "actionId", op: "eq" }];

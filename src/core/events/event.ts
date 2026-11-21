@@ -3,6 +3,7 @@ import type { JsonObject } from "type-fest";
 
 import { z } from "zod";
 
+import type { Config } from "../../config/schema.ts";
 import type { EventFilterDescriptor, EventKindDescriptor } from "../../protocol/descriptors.ts";
 
 export interface EventKindDefinition<Payload extends JsonObject> {
@@ -31,6 +32,7 @@ export type Emit = <Payload extends JsonObject>(
 export interface EventSourceContext {
   bot: Bot;
   emit: Emit;
+  config: Config;
 }
 
 export interface EventSourceDefinition {

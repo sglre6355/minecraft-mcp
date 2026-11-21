@@ -1,6 +1,8 @@
+import type { Bot } from "mineflayer";
+
 import type { Config } from "../config/schema.ts";
 import type { CallResult, CoreToGateway, GatewayToCore } from "../protocol/messages.ts";
-import type { Emit } from "./events/event.ts";
+import type { Emit, EventSourceDefinition } from "./events/event.ts";
 import type { Tool } from "./tools.ts";
 
 import { log } from "../log.ts";
@@ -18,12 +20,48 @@ function post(message: CoreToGateway): void {
   self.postMessage(message);
 }
 
+// Events are emitted from inside Mineflayer's listeners, where a throw would take the core down.
+// An event that cannot be sent is logged and dropped.
 const emit: Emit = (kind, payload) => {
-  post({
-    type: "event",
-    event: { kind: kind.kind, occurredAt: new Date(), payload: kind.payload.parse(payload) },
-  });
+  try {
+    post({
+      type: "event",
+      event: { kind: kind.kind, occurredAt: new Date(), payload: kind.payload.parse(payload) },
+    });
+  } catch (error) {
+    log("error", "core", `could not emit ${kind.kind}`, { detail: errorMessage(error) });
+  }
 };
+
+// Runs every event source on a bot. Returns the function that stops them all.
+// One source that fails to start or stop does not affect the others.
+function startEventSources(
+  sources: ReadonlyArray<EventSourceDefinition>,
+  bot: Bot,
+  config: Config,
+): () => void {
+  const stops = sources.flatMap((source) => {
+    try {
+      return [{ name: source.name, stop: source.start({ bot, emit, config }) }];
+    } catch (error) {
+      log("error", "core", `the event source ${source.name} did not start`, {
+        detail: errorMessage(error),
+      });
+      return [];
+    }
+  });
+  return () => {
+    for (const { name, stop } of stops) {
+      try {
+        stop();
+      } catch (error) {
+        log("error", "core", `the event source ${name} did not stop`, {
+          detail: errorMessage(error),
+        });
+      }
+    }
+  };
+}
 
 // An action told to stop keeps the body for at most this long.
 const stopGraceMs = 2000;
@@ -38,8 +76,16 @@ async function init(config: Config): Promise<void> {
     waitMs: config.actions.waitMs,
     stopGraceMs,
   });
-  const connection = new Connection(config.minecraft, emit, () => {
-    runner.disconnected();
+  let stopEventSources: (() => void) | undefined;
+  const connection = new Connection(config.minecraft, emit, {
+    onSpawn: (bot) => {
+      stopEventSources = startEventSources(registry.eventSources, bot, config);
+    },
+    onEnd: () => {
+      stopEventSources?.();
+      stopEventSources = undefined;
+      runner.disconnected();
+    },
   });
   tools = buildTools({ registry, runner, emit, bot: () => connection.bot });
 
