@@ -31,4 +31,55 @@ export default defineConfig({
     "typescript/no-base-to-string": "error",
     "import/no-cycle": "error",
   },
+  overrides: [
+    ...(cloudflare.overrides ?? []),
+    {
+      files: ["src/gateway/**"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: ["**/core/**"],
+                message: "The gateway runs on the main thread and shares only data with the core.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: ["src/core/**"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: ["**/gateway/**"],
+                message: "The core runs in a Worker and shares only data with the gateway.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: ["src/protocol/**", "src/config/**", "src/log.ts"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: ["**/gateway/**", "**/core/**"],
+                message: "Both threads load the shared layer, so it stays free of either.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
 });
