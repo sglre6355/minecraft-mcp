@@ -112,4 +112,27 @@ describe("EventLog", () => {
     log.append(chat("b"));
     expect(log.head("chat.message")).toBe(2);
   });
+
+  test("numbers events across kinds in the order they arrived", () => {
+    const log = new EventLog(8);
+
+    const first = log.append(chat("a"));
+    const second = log.append({ kind: "body.damage", occurredAt: new Date(0), payload: {} });
+    const third = log.append(chat("b"));
+
+    expect([first.order, second.order, third.order]).toEqual([1, 2, 3]);
+  });
+
+  test("tells listeners about each appended event until they leave", () => {
+    const log = new EventLog(8);
+    const heard: Array<string> = [];
+    const leave = log.subscribe((event) => heard.push(event.kind));
+
+    log.append(chat("a"));
+    leave();
+    log.append(chat("b"));
+
+    expect(heard).toEqual(["chat.message"]);
+    expect(log.listenerCount).toBe(0);
+  });
 });
