@@ -8,6 +8,7 @@ import type { Emit, EventKindDefinition } from "./events/event.ts";
 
 import { log } from "../log.ts";
 import { defineEventKind } from "./events/event.ts";
+import { aborted, within } from "./wait.ts";
 
 const identity = { actionId: z.string(), name: z.string() };
 const progressData: z.ZodType<JsonObject> = z.record(z.string(), z.json());
@@ -283,33 +284,5 @@ async function settle(request: ActionRequest, control: ActionControl): Promise<O
     return { status: "completed", output: await request.run(control) };
   } catch (error) {
     return { status: "failed", message: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-function aborted(signal: AbortSignal): Promise<"aborted"> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve("aborted");
-      return;
-    }
-    signal.addEventListener(
-      "abort",
-      () => {
-        resolve("aborted");
-      },
-      { once: true },
-    );
-  });
-}
-
-async function within<Value>(promise: Promise<Value>, ms: number): Promise<Value | undefined> {
-  const timer = Promise.withResolvers<undefined>();
-  const timeout = setTimeout(() => {
-    timer.resolve(undefined);
-  }, ms);
-  try {
-    return await Promise.race([promise, timer.promise]);
-  } finally {
-    clearTimeout(timeout);
   }
 }

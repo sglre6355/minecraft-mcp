@@ -186,7 +186,7 @@ function busy(heldBy: BodyHolder, runner: ActionRunner): CallResult {
       ok: false,
       error: {
         code: "busy",
-        message: `The reflex "${heldBy.name}" has the body.`,
+        message: `The reflex "${heldBy.name}" has the body. Wait for it to end, or name it in ${suppressionKey} to take the body from it.`,
         details: { reflex: heldBy.name },
       },
     };

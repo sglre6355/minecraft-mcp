@@ -36,12 +36,19 @@ const actions = z.strictObject({
   waitMs: z.int().min(0).default(10_000),
 });
 
+// Keyed by the name of a reflex. A reflex runs unless it is switched off here.
+const reflexes = z.record(
+  z.string().min(1),
+  z.strictObject({ enabled: z.boolean().default(true) }),
+);
+
 export const configSchema = z.strictObject({
   minecraft,
   server: server.prefault({}),
   chat: chat.prefault({}),
   events: events.prefault({}),
   actions: actions.prefault({}),
+  reflexes: reflexes.default({}),
   // The ways events reach the agent.
   delivery: z.array(z.enum(["poll-tool", "mcp-events"])).default(["poll-tool", "mcp-events"]),
   plugins: z.array(z.string().min(1)).default([]),

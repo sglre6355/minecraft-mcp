@@ -33,9 +33,19 @@ describe("configSchema", () => {
       chat: { trustedSenders: [] },
       events: { capacity: 256, oxygenAtMost: 10, foodAtMost: 6 },
       actions: { waitMs: 10_000 },
+      reflexes: {},
       delivery: ["poll-tool", "mcp-events"],
       plugins: [],
     });
+  });
+
+  test("lets a reflex be switched off by name", () => {
+    const config = configSchema.parse({
+      minecraft: { host: "mc.example", username: "bot" },
+      reflexes: { drowning: { enabled: false }, fleeing: {} },
+    });
+
+    expect(config.reflexes).toEqual({ drowning: { enabled: false }, fleeing: { enabled: true } });
   });
 
   test("requires the Minecraft server and the username", () => {

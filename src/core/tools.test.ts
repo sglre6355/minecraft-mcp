@@ -14,8 +14,9 @@ const silent: Emit = () => {};
 
 const drowning: Reflex<unknown, string> = {
   name: "drowning",
+  limitMs: 1000,
   observe: () => undefined,
-  policy: { decide: () => Promise.resolve("ignore") },
+  policy: { decide: () => Promise.resolve(undefined) },
   execute: () => Promise.resolve(),
 };
 
