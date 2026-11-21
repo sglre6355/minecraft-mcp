@@ -30,7 +30,7 @@ describe("configSchema", () => {
         resolveSrv: true,
       },
       server: { host: "127.0.0.1", port: 3000 },
-      chat: { trustedSenders: [] },
+      chat: { trustedSenders: [], allowCommands: false },
       events: { capacity: 256, oxygenAtMost: 10, foodAtMost: 6 },
       actions: { waitMs: 10_000 },
       reflexes: {},

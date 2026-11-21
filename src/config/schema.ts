@@ -21,6 +21,8 @@ const server = z.strictObject({
 const chat = z.strictObject({
   // Chat from these players is marked as trusted. The mark informs the agent and enforces nothing.
   trustedSenders: z.array(z.string().min(1)).default([]),
+  // Lets the agent send messages that start with a slash, which the server runs as commands.
+  allowCommands: z.boolean().default(false),
 });
 
 const events = z.strictObject({
