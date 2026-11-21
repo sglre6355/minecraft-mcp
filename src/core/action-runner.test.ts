@@ -236,6 +236,18 @@ describe("ActionRunner", () => {
     expect(runner.report(report.actionId)).toMatchObject({ status: "running" });
   });
 
+  test("interrupts the running action when the bot dies", async () => {
+    const { body, runner } = create();
+    const action = controllable();
+    const report = started(await runner.start(request(action.run)));
+
+    runner.died();
+    await Bun.sleep(0);
+
+    expect(runner.report(report.actionId)).toMatchObject({ status: "interrupted", by: "death" });
+    expect(body.holder).toBeUndefined();
+  });
+
   test("interrupts the running action when the bot disconnects", async () => {
     const { body, runner } = create();
     const action = controllable();

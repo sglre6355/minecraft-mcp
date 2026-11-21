@@ -6,7 +6,7 @@ import type { Emit } from "../events/event.ts";
 
 export interface ActionContext<Progress extends JsonObject> {
   bot: Bot;
-  // Aborts when the agent cancels the action, a reflex takes the body, or the bot disconnects.
+  // Aborts when the agent cancels the action, a reflex takes the body, or the bot dies or disconnects.
   // An action that keeps going after that loses the body anyway.
   signal: AbortSignal;
   progress: (data: Progress) => void;

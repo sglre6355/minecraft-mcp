@@ -61,7 +61,7 @@ export const interrupted = defineEventKind({
   filters,
   payload: z.object({
     ...identity,
-    by: z.enum(["agent", "reflex", "disconnect"]),
+    by: z.enum(["agent", "reflex", "death", "disconnect"]),
     reflex: z.string().nullable(),
     stopped: z.boolean(),
   }),
@@ -181,6 +181,13 @@ export class ActionRunner {
     }
     this.#stop(running, "agent");
     return running.ended;
+  }
+
+  // The bot comes back to life somewhere else, so what it was doing is over.
+  died(): void {
+    if (this.#running !== undefined) {
+      this.#stop(this.#running, "death");
+    }
   }
 
   disconnected(): void {

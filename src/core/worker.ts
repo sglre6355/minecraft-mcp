@@ -114,6 +114,9 @@ async function init(config: Config): Promise<void> {
   let reflexChecks: ReturnType<typeof setInterval> | undefined;
   const connection = new Connection(config.minecraft, emit, {
     onSpawn: (bot) => {
+      bot.on("death", () => {
+        runner.died();
+      });
       stopEventSources = startEventSources(registry.eventSources, bot, config);
       const reflexes = [...registry.reflexes.values()].map((reflex) => bind(reflex, bot));
       reflexChecks = setInterval(() => {
