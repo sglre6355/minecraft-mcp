@@ -24,6 +24,10 @@ interface KindRecord {
 
 // Keeps the latest events of each kind, so a chatty kind cannot push out a rare one.
 export class EventLog {
+  // Sequence numbers restart with the process. A position that carries the epoch can be told
+  // apart from one issued by an earlier run.
+  readonly epoch = crypto.randomUUID().slice(0, 8);
+
   readonly #capacity: number;
   readonly #kinds = new Map<string, KindRecord>();
   readonly #listeners = new Set<(event: RecordedEvent) => void>();

@@ -113,6 +113,10 @@ describe("EventLog", () => {
     expect(log.head("chat.message")).toBe(2);
   });
 
+  test("gives each log its own epoch", () => {
+    expect(new EventLog(8).epoch).not.toBe(new EventLog(8).epoch);
+  });
+
   test("numbers events across kinds in the order they arrived", () => {
     const log = new EventLog(8);
 
