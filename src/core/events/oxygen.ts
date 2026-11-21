@@ -22,7 +22,7 @@ export function airRanLow(previous: number, current: number, atMost: number): bo
   return current < previous && current <= atMost;
 }
 
-const fullAir = 20;
+export const fullAir = 20;
 
 // Turns Mineflayer's `oxygenLevel` into air left, from 0 to 20.
 // The field is unset until the server reports a change in air. While the bot drowns it
