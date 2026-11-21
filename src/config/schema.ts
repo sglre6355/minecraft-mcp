@@ -23,10 +23,16 @@ const events = z.strictObject({
   capacity: z.int().min(1).default(256),
 });
 
+const actions = z.strictObject({
+  // A call that starts an action answers after this long, even if the action still runs.
+  waitMs: z.int().min(0).default(10_000),
+});
+
 export const configSchema = z.strictObject({
   minecraft,
   server: server.prefault({}),
   events: events.prefault({}),
+  actions: actions.prefault({}),
   plugins: z.array(z.string().min(1)).default([]),
 });
 

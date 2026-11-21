@@ -9,7 +9,7 @@ import type { QueryDefinition } from "./queries/query.ts";
 import type { Reflex } from "./reflexes/reflex.ts";
 
 export interface Registry {
-  actions: Map<string, ActionDefinition<unknown, JsonValue>>;
+  actions: Map<string, ActionDefinition<unknown, JsonValue, JsonObject>>;
   queries: Map<string, QueryDefinition<unknown, JsonValue>>;
   reflexes: Map<string, Reflex<unknown, string>>;
   eventSources: Array<EventSourceDefinition>;

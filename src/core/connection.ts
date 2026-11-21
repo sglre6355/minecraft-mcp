@@ -48,11 +48,13 @@ export const connectionEventKinds = [connected, disconnected, kicked, msaCode, c
 export class Connection {
   readonly #config: Config["minecraft"];
   readonly #emit: Emit;
+  readonly #onEnd: () => void;
   #bot: Bot | undefined;
 
-  constructor(config: Config["minecraft"], emit: Emit) {
+  constructor(config: Config["minecraft"], emit: Emit, onEnd: () => void) {
     this.#config = config;
     this.#emit = emit;
+    this.#onEnd = onEnd;
   }
 
   // The bot, from the moment it spawns until the connection ends.
@@ -100,6 +102,7 @@ export class Connection {
     });
     bot.once("end", (reason) => {
       this.#bot = undefined;
+      this.#onEnd();
       this.#emit(disconnected, { reason });
     });
   }

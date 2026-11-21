@@ -1,4 +1,4 @@
-import type { JsonValue } from "type-fest";
+import type { JsonObject, JsonValue } from "type-fest";
 
 import type { Config } from "../config/schema.ts";
 import type { EventKindDescriptor, ToolDescriptor } from "./descriptors.ts";
@@ -20,6 +20,8 @@ export type CallResult = { ok: true; output: JsonValue } | { ok: false; error: C
 export interface CallError {
   code: CallErrorCode;
   message: string;
+  // Facts the agent can act on, such as the ID of the action that holds the body.
+  details?: JsonObject;
 }
 
 export type CallErrorCode =
@@ -27,4 +29,7 @@ export type CallErrorCode =
   | "invalid_input"
   | "not_connected"
   | "failed"
+  | "busy"
+  | "interrupted"
+  | "unknown_action"
   | "core_unavailable";

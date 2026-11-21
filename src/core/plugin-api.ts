@@ -1,4 +1,4 @@
-import type { JsonValue } from "type-fest";
+import type { JsonObject, JsonValue } from "type-fest";
 
 import type { ActionDefinition } from "./actions/action.ts";
 import type { EventSourceDefinition } from "./events/event.ts";
@@ -20,7 +20,7 @@ export type {
 
 export interface Plugin {
   name: string;
-  actions?: Array<ActionDefinition<unknown, JsonValue>>;
+  actions?: Array<ActionDefinition<unknown, JsonValue, JsonObject>>;
   queries?: Array<QueryDefinition<unknown, JsonValue>>;
   reflexes?: Array<Reflex<unknown, string>>;
   eventSources?: Array<EventSourceDefinition>;

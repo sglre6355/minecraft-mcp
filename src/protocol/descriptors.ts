@@ -3,10 +3,13 @@ import type { z } from "zod";
 export type JsonSchema = z.core.JSONSchema.JSONSchema;
 
 export interface ToolDescriptor {
-  kind: "action" | "query";
+  // A control tool manages running actions. It neither reads the world nor uses the body.
+  kind: "action" | "query" | "control";
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  // What an action reports as progress while it runs.
+  progressSchema?: JsonSchema;
 }
 
 export type FilterOperator = "eq" | "gte" | "lte" | "in";

@@ -28,6 +28,7 @@ export function createServer({ core, log, deliveries }: ServerParts): McpServer 
         description: tool.description,
         inputSchema: describedBy(tool.inputSchema),
         annotations: { readOnlyHint: tool.kind === "query" },
+        _meta: tool.progressSchema === undefined ? {} : { progressSchema: tool.progressSchema },
       },
       async (input) => toToolResult(await core.call(tool.name, input)),
     );

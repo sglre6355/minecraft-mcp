@@ -1,16 +1,16 @@
-import { z } from "zod";
-
 import type { Config } from "../config/schema.ts";
-import type { ToolDescriptor } from "../protocol/descriptors.ts";
 import type { CallResult, CoreToGateway, GatewayToCore } from "../protocol/messages.ts";
 import type { Emit } from "./events/event.ts";
-import type { Registry } from "./plugins.ts";
+import type { Tool } from "./tools.ts";
 
 import { log } from "../log.ts";
+import { ActionRunner, actionEventKinds } from "./action-runner.ts";
+import { Body } from "./body.ts";
 import { builtin } from "./builtin.ts";
 import { Connection, connectionEventKinds } from "./connection.ts";
 import { describeEventKind } from "./events/event.ts";
 import { buildRegistry, loadPlugins } from "./plugins.ts";
+import { buildTools } from "./tools.ts";
 
 declare const self: Worker;
 
@@ -25,51 +25,41 @@ const emit: Emit = (kind, payload) => {
   });
 };
 
-interface Core {
-  registry: Registry;
-  connection: Connection;
-}
+// An action told to stop keeps the body for at most this long.
+const stopGraceMs = 2000;
 
-let core: Core | undefined;
+let tools: Map<string, Tool> | undefined;
 
 async function init(config: Config): Promise<void> {
   const registry = buildRegistry([builtin, ...(await loadPlugins(config.plugins))]);
-  const connection = new Connection(config.minecraft, emit);
-  core = { registry, connection };
+  const runner = new ActionRunner({
+    body: new Body(),
+    emit,
+    waitMs: config.actions.waitMs,
+    stopGraceMs,
+  });
+  const connection = new Connection(config.minecraft, emit, () => {
+    runner.disconnected();
+  });
+  tools = buildTools({ registry, runner, emit, bot: () => connection.bot });
 
-  const tools: Array<ToolDescriptor> = [...registry.queries.values()].map((query) => ({
-    kind: "query",
-    name: query.name,
-    description: query.description,
-    inputSchema: z.toJSONSchema(query.input, { io: "input" }),
-  }));
-  const eventKinds = [...connectionEventKinds, ...registry.eventKinds].map(describeEventKind);
+  const eventKinds = [...connectionEventKinds, ...actionEventKinds, ...registry.eventKinds];
 
   connection.connect();
-  post({ type: "ready", tools, eventKinds });
+  post({
+    type: "ready",
+    tools: [...tools.values()].map((tool) => tool.descriptor),
+    eventKinds: eventKinds.map(describeEventKind),
+  });
 }
 
-async function call(tool: string, input: unknown): Promise<CallResult> {
-  const query = core?.registry.queries.get(tool);
-  if (core === undefined || query === undefined) {
-    return { ok: false, error: { code: "unknown_tool", message: `No tool is named "${tool}".` } };
+async function call(name: string, input: unknown): Promise<CallResult> {
+  const tool = tools?.get(name);
+  if (tool === undefined) {
+    return { ok: false, error: { code: "unknown_tool", message: `No tool is named "${name}".` } };
   }
   try {
-    const parsed = await query.input.safeParseAsync(input);
-    if (!parsed.success) {
-      return {
-        ok: false,
-        error: { code: "invalid_input", message: z.prettifyError(parsed.error) },
-      };
-    }
-    const bot = core.connection.bot;
-    if (bot === undefined) {
-      return {
-        ok: false,
-        error: { code: "not_connected", message: "The bot is not in the Minecraft server." },
-      };
-    }
-    return { ok: true, output: await query.run({ bot }, parsed.data) };
+    return await tool.call(input);
   } catch (error) {
     return { ok: false, error: { code: "failed", message: errorMessage(error) } };
   }
