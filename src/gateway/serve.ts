@@ -7,6 +7,7 @@ import type { ServerParts } from "./server.ts";
 import { log } from "../log.ts";
 import { createAuthGate } from "./auth.ts";
 import { EventLog } from "./delivery/event-log.ts";
+import { mcpEvents } from "./delivery/mcp-events/mcp-events.ts";
 import { pollTool } from "./delivery/poll-tool/poll-tool.ts";
 import { createServer } from "./server.ts";
 import { Supervisor } from "./supervisor.ts";
@@ -25,6 +26,8 @@ function createDelivery(name: Config["delivery"][number], supervisor: Supervisor
   switch (name) {
     case "poll-tool":
       return pollTool(() => supervisor.eventKinds);
+    case "mcp-events":
+      return mcpEvents({ kinds: () => supervisor.eventKinds });
   }
 }
 
@@ -47,13 +50,14 @@ export async function serve({ config, token }: ServeOptions): Promise<Running> {
   };
   try {
     // A tool name claimed twice fails here, at startup, instead of on every request.
-    createServer(parts);
+    createServer(parts, "legacy");
+    createServer(parts, "modern");
   } catch (error) {
     supervisor.stop();
     throw error;
   }
 
-  const handler = createMcpHandler(() => createServer(parts), {
+  const handler = createMcpHandler((context) => createServer(parts, context.era), {
     onerror: (error) => {
       log("error", "mcp", error.message);
     },

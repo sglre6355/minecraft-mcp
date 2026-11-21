@@ -34,7 +34,7 @@ export const configSchema = z.strictObject({
   events: events.prefault({}),
   actions: actions.prefault({}),
   // The ways events reach the agent.
-  delivery: z.array(z.enum(["poll-tool"])).default(["poll-tool"]),
+  delivery: z.array(z.enum(["poll-tool", "mcp-events"])).default(["poll-tool", "mcp-events"]),
   plugins: z.array(z.string().min(1)).default([]),
 });
 

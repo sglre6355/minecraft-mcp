@@ -51,12 +51,11 @@ const moveTo: ToolDescriptor = {
 function serve(tools: Array<ToolDescriptor> = []) {
   const log = new EventLog(8);
   const deliveries = [pollTool(() => eventKinds)];
-  const handler = createMcpHandler(() =>
-    createServer({
-      core: { tools, call: () => Promise.resolve({ ok: true, output: null }) },
-      log,
-      deliveries,
-    }),
+  const handler = createMcpHandler((context) =>
+    createServer(
+      { core: { tools, call: () => Promise.resolve({ ok: true, output: null }) }, log, deliveries },
+      context.era,
+    ),
   );
   const request = async (method: string, params: JsonObject) => {
     const response = await handler.fetch(
@@ -125,11 +124,14 @@ describe("createServer", () => {
     const clash: ToolDescriptor = { ...moveTo, name: "poll_events" };
 
     expect(() =>
-      createServer({
-        core: { tools: [clash], call: () => Promise.resolve({ ok: true, output: null }) },
-        log: new EventLog(8),
-        deliveries: [pollTool(() => eventKinds)],
-      }),
+      createServer(
+        {
+          core: { tools: [clash], call: () => Promise.resolve({ ok: true, output: null }) },
+          log: new EventLog(8),
+          deliveries: [pollTool(() => eventKinds)],
+        },
+        "legacy",
+      ),
     ).toThrow("poll_events");
   });
 });

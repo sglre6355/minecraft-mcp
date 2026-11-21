@@ -1,4 +1,8 @@
-import type { CallToolResult, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
+import type {
+  CallToolResult,
+  ProtocolEra,
+  StandardSchemaWithJSON,
+} from "@modelcontextprotocol/server";
 
 import { McpServer } from "@modelcontextprotocol/server";
 
@@ -18,7 +22,8 @@ export interface ServerParts {
   deliveries: Array<Delivery>;
 }
 
-export function createServer({ core, log, deliveries }: ServerParts): McpServer {
+// Builds the server for one request. `era` is the protocol era of that request.
+export function createServer({ core, log, deliveries }: ServerParts, era: ProtocolEra): McpServer {
   const server = new McpServer({ name: "minecraft-mcp", version: "0.0.0" });
 
   for (const tool of core.tools) {
@@ -33,7 +38,7 @@ export function createServer({ core, log, deliveries }: ServerParts): McpServer 
     );
   }
   for (const delivery of deliveries) {
-    delivery.attach(server, log);
+    delivery.attach(server, log, era);
   }
   return server;
 }
