@@ -58,7 +58,8 @@ describe("Body", () => {
 
     expect(await settled(pending)).toBe(false);
     expect(action.signal.aborted).toBe(true);
-    expect(action.signal.reason).toEqual({ kind: "reflex", name: "drowning" });
+    expect(action.signal.reason).toBeInstanceOf(Error);
+    expect(action.takenBy).toEqual({ kind: "reflex", name: "drowning" });
 
     action.release();
     const grant = await pending;
@@ -122,7 +123,7 @@ describe("Body", () => {
     const pending = body.acquireForAction("a1", ["low-health"]);
 
     expect(await settled(pending)).toBe(false);
-    expect(reflex.signal.reason).toEqual({ kind: "action", id: "a1" });
+    expect(reflex.takenBy).toEqual({ kind: "action", id: "a1" });
 
     reflex.release();
     const grant = await pending;
@@ -156,5 +157,22 @@ describe("Body", () => {
     action.release();
 
     expect(body.holder).toEqual({ kind: "reflex", name: "drowning" });
+  });
+
+  test("refuses a takeover that lost the body while it waited", async () => {
+    const body = new Body();
+    const first = granted(await body.acquireForAction("a1", []));
+    const reflex = body.acquireForReflex("drowning");
+    const second = body.acquireForAction("a2", ["drowning"]);
+
+    first.release();
+
+    expect(await reflex).toEqual({
+      granted: false,
+      reason: "busy",
+      heldBy: { kind: "action", id: "a2" },
+    });
+    expect(await second).toMatchObject({ granted: true });
+    expect(body.holder).toEqual({ kind: "action", id: "a2" });
   });
 });
