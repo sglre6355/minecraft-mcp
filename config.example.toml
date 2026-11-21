@@ -1,0 +1,42 @@
+# Copy to minecraft-mcp.toml, or pass another path with --config.
+# Every setting is optional, and the values here are the defaults.
+#
+# The token that agents present comes from the environment variable MINECRAFT_MCP_TOKEN.
+# The Minecraft server to join is not a setting. The agent names it when it calls connect.
+
+# The ways events reach the agent.
+delivery = ["poll-tool", "mcp-events"]
+
+# Paths of plugins to load, relative to this file.
+plugins = []
+
+[server]
+# Where the MCP endpoint listens. Its path is /mcp.
+host = "127.0.0.1"
+port = 3000
+
+[minecraft]
+# Where Microsoft sign-in is kept between runs, relative to this file.
+# Left out, it is the nmp-cache directory in the Minecraft folder.
+# profilesDirectory = "profiles"
+
+[chat]
+# Chat from these players is marked as trusted. The mark informs the agent and enforces nothing.
+trustedSenders = []
+# Lets the agent send messages that start with a slash, which the server runs as commands.
+allowCommands = false
+
+[events]
+# Events kept per kind.
+capacity = 256
+# Air and food are reported once they fall to these levels. Both run from 0 to 20.
+oxygenAtMost = 10
+foodAtMost = 6
+
+[actions]
+# A call that starts an action answers after this many milliseconds, even if the action still runs.
+waitMs = 10000
+
+# A reflex runs unless it is switched off by name.
+# [reflexes.drowning]
+# enabled = false
