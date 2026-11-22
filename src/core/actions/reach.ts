@@ -23,9 +23,14 @@ export function blockAt(bot: Bot, x: number, y: number, z: number) {
 // Close enough for the bot's hands.
 const armsLength = 3;
 
-// Walks until a position is within the bot's reach.
-export async function approach(bot: Bot, position: Vector, signal: AbortSignal): Promise<void> {
-  const goal = new goals.GoalNear(position.x, position.y, position.z, armsLength);
+// Walks until a position is within the bot's reach, or within `reach` blocks of it.
+export async function approach(
+  bot: Bot,
+  position: Vector,
+  signal: AbortSignal,
+  reach = armsLength,
+): Promise<void> {
+  const goal = new goals.GoalNear(position.x, position.y, position.z, reach);
   if (!(await walk(bot, goal, signal))) {
     throw new Error(
       `No path leads to within reach of ${position.x}, ${position.y}, ${position.z}.`,
