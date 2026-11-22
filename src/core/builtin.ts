@@ -20,9 +20,7 @@ import { definePlugin } from "./plugin-api.ts";
 import { blockAt } from "./queries/block-at.ts";
 import { craftable } from "./queries/craftable.ts";
 import { craftingPlan } from "./queries/crafting-plan.ts";
-import { findBlocks } from "./queries/find-blocks.ts";
 import { inventory } from "./queries/inventory.ts";
-import { lookAround } from "./queries/look-around.ts";
 import { look } from "./queries/look.ts";
 import { nearbyEntities } from "./queries/nearby-entities.ts";
 import { pathTo } from "./queries/path-to.ts";
@@ -57,9 +55,7 @@ export const builtin = definePlugin({
     status,
     inventory,
     look,
-    lookAround,
     nearbyEntities,
-    findBlocks,
     blockAt,
     readSign,
     pathTo,
