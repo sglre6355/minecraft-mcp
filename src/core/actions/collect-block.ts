@@ -80,51 +80,61 @@ export const collectBlock = defineAction({
     let problem = `No ${input.block} is within ${input.range} blocks.`;
     let collected = 0;
 
-    while (collected < input.count) {
-      const standing = bot.findBlocks({ matching: kind.id, maxDistance: input.range, count: 64 });
-      const position = standing.find((candidate) => !tried.has(candidate.toString()));
-      const block = position === undefined ? null : bot.blockAt(position);
-      if (block === null) {
-        break;
-      }
-      tried.add(block.position.toString());
-      const [above, ...others] = namesAround(bot, block.position);
-      if (!input.unsafe && !safeToBreak([above, ...others], above)) {
-        problem = `The ${input.block} in range touches a liquid or holds up sand or gravel. Pass unsafe to take it anyway.`;
-      } else if (!(await equipToolFor(bot, block))) {
-        throw new Error(`The bot carries no tool that can harvest ${input.block}.`);
-      } else {
-        const done = await stoppable(signal, stop, () =>
-          within(
-            bot.collectBlock.collect(block).then(
-              () => true,
-              (error: unknown) => {
-                problem = error instanceof Error ? error.message : String(error);
-                return false;
-              },
+    try {
+      while (collected < input.count) {
+        const standing = bot.findBlocks({
+          matching: kind.id,
+          maxDistance: input.range,
+          count: 64,
+        });
+        const position = standing.find((candidate) => !tried.has(candidate.toString()));
+        const block = position === undefined ? null : bot.blockAt(position);
+        if (block === null) {
+          break;
+        }
+        tried.add(block.position.toString());
+        const [above, ...others] = namesAround(bot, block.position);
+        if (!input.unsafe && !safeToBreak([above, ...others], above)) {
+          problem = `The ${input.block} in range touches a liquid or holds up sand or gravel. Pass unsafe to take it anyway.`;
+        } else if (!(await equipToolFor(bot, block))) {
+          throw new Error(`The bot carries no tool that can harvest ${input.block}.`);
+        } else {
+          const done = await stoppable(signal, stop, () =>
+            within(
+              bot.collectBlock.collect(block).then(
+                () => true,
+                (error: unknown) => {
+                  problem = error instanceof Error ? error.message : String(error);
+                  return false;
+                },
+              ),
+              perBlockMs,
             ),
-            perBlockMs,
-          ),
-        );
-        signal.throwIfAborted();
-        if (done === undefined) {
-          stop();
-          problem = `Gathering ${input.block} took too long.`;
-        }
-        // The plugin gives up on a block without saying so, and the bot also breaks blocks of
-        // the kind that stand in its way. What counts is which of them are gone.
-        const gone = standing.filter((candidate) => {
-          const now = bot.blockAt(candidate);
-          return now !== null && now.type !== kind.id;
-        }).length;
-        if (gone === 0 && done === true) {
-          problem = `The bot could not reach or break the ${input.block}.`;
-        }
-        collected += gone;
-        if (gone > 0) {
-          progress({ collected });
+          );
+          signal.throwIfAborted();
+          if (done === undefined) {
+            stop();
+            problem = `Gathering ${input.block} took too long.`;
+          }
+          // The plugin gives up on a block without saying so, and the bot also breaks blocks of
+          // the kind that stand in its way. What counts is which of them are gone.
+          const gone = standing.filter((candidate) => {
+            const now = bot.blockAt(candidate);
+            return now !== null && now.type !== kind.id;
+          }).length;
+          if (gone === 0 && done === true) {
+            problem = `The bot could not reach or break the ${input.block}.`;
+          }
+          collected += gone;
+          if (gone > 0) {
+            progress({ collected });
+          }
         }
       }
+    } finally {
+      // The plugin leaves its goal with the pathfinder when it gives up, and the bot would
+      // walk on.
+      bot.pathfinder.setGoal(null);
     }
 
     if (collected === 0) {
