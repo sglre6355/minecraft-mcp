@@ -7,7 +7,7 @@ import { defineEventKind } from "./event.ts";
 export const lowAir = defineEventKind({
   kind: "body.oxygen",
   description:
-    "The bot's air fell further while at or below the configured level. At 0 the bot starts to drown.",
+    "The bot's air reached a new low at or below the configured level. A level is reported once until the air has been full again. At 0 the bot starts to drown.",
   payload: z.object({
     oxygen: z.number().describe("Air left, from 0 to 20."),
   }),
@@ -17,12 +17,18 @@ export const lowAir = defineEventKind({
   filters: [{ param: "atMost", field: "oxygen", op: "lte" }],
 });
 
-// Whether a new reading is worth reporting. Air that holds or comes back is not.
-export function airRanLow(previous: number, current: number, atMost: number): boolean {
-  return current < previous && current <= atMost;
+export const fullAir = 20;
+
+// Whether a new reading is worth reporting. `lowest` is the least air since it was last full.
+// At the water surface the level flickers up and down, and a level seen before is not news.
+export function airRanLow(lowest: number, current: number, atMost: number): boolean {
+  return current < lowest && current <= atMost;
 }
 
-export const fullAir = 20;
+// The least air since it was last full, after a new reading.
+export function lowestAir(lowest: number, current: number): number {
+  return current === fullAir ? fullAir : Math.min(lowest, current);
+}
 
 // Turns Mineflayer's `oxygenLevel` into air left, from 0 to 20.
 // The field is unset until the server reports a change in air. While the bot drowns it
@@ -35,19 +41,25 @@ export const oxygen: EventSourceDefinition = {
   name: "oxygen",
   kinds: [lowAir],
   start({ bot, emit, config }) {
-    let level = airLevel(bot.oxygenLevel);
+    let lowest = airLevel(bot.oxygenLevel);
 
     // The server repeats the same level many times a second.
     const onBreath = () => {
       const current = airLevel(bot.oxygenLevel);
-      if (airRanLow(level, current, config.events.oxygenAtMost)) {
+      if (airRanLow(lowest, current, config.events.oxygenAtMost)) {
         emit(lowAir, { oxygen: current });
       }
-      level = current;
+      lowest = lowestAir(lowest, current);
+    };
+    // The bot comes back to life with full air, and the server sends no level for it.
+    const onDeath = () => {
+      lowest = fullAir;
     };
     bot.on("breath", onBreath);
+    bot.on("death", onDeath);
     return () => {
       bot.off("breath", onBreath);
+      bot.off("death", onDeath);
     };
   },
 };
