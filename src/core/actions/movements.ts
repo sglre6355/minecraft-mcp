@@ -56,11 +56,14 @@ export class Movements extends PathfinderMovements {
     return block;
   }
 
-  // Adds the ways through deep water. The pathfinder only swims level and leaves water
-  // where it can stand on the bottom.
   override getNeighbors(node: Move): Array<Move> {
-    const neighbors = super.getNeighbors(node);
     const feet = this.bot.entity.position.clone().set(node.x, node.y, node.z);
+    // The top of a ladder is a thin ledge, which leaves no room to run up for a jump.
+    const onLadder = this.getBlock(feet, 0, -1, 0).climbable;
+    const neighbors = super.getNeighbors(node).filter((move) => !(onLadder && move.parkour));
+
+    // The ways through deep water follow. The pathfinder only swims level and leaves water
+    // where it can stand on the bottom.
     const water = this.getBlock(feet, 0, 0, 0);
     if (!isWater(water)) {
       return neighbors;
