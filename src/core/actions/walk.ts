@@ -38,6 +38,70 @@ type Point = {
   z: number;
 };
 
+// What a search for a path came to.
+export type Route = {
+  // `unreachable` when the search went through every place the bot can get to. `undecided`
+  // when it ran out of time before that.
+  answer: "reaches" | "unreachable" | "undecided";
+  // The block the path ends in, which is the block the bot stands in for a path without steps.
+  end: Point;
+  steps: number;
+  // Steps that jump over a gap.
+  jumps: number;
+  // Blocks the path breaks and places.
+  breaks: number;
+  places: number;
+};
+
+const answers = { success: "reaches", noPath: "unreachable", timeout: "undecided" } as const;
+
+type Step = Point & {
+  parkour: boolean;
+  toBreak: ReadonlyArray<unknown>;
+  toPlace: ReadonlyArray<unknown>;
+};
+
+export function routeOf(
+  status: keyof typeof answers,
+  path: ReadonlyArray<Step>,
+  start: Point,
+): Route {
+  const last = path.at(-1) ?? start;
+  return {
+    answer: answers[status],
+    end: { x: last.x, y: last.y, z: last.z },
+    steps: path.length,
+    jumps: path.filter((step) => step.parkour).length,
+    breaks: path.reduce((sum, step) => sum + step.toBreak.length, 0),
+    places: path.reduce((sum, step) => sum + step.toPlace.length, 0),
+  };
+}
+
+// The longest a search keeps the core's thread before other work gets a turn, in milliseconds.
+const sliceMs = 8;
+
+// Searches for the path a walk to the goal would take from where the bot stands. The bot
+// does not move, and a walk that is under way goes on.
+export async function findRoute(
+  bot: Bot,
+  goal: goals.Goal,
+  options: WalkOptions = {},
+): Promise<Route> {
+  const movements = movementsFor(bot, options);
+  const { x, y, z } = bot.entity.position.floored();
+  let route = routeOf("timeout", [], { x, y, z });
+  const search = bot.pathfinder.getPathFromTo(movements, bot.entity.position, goal, {
+    optimizePath: false,
+    tickTimeout: sliceMs,
+  });
+  // The search hands back what it has after every slice.
+  for (const { result } of search) {
+    route = routeOf(result.status, result.path, { x, y, z });
+    await Bun.sleep(1);
+  }
+  return route;
+}
+
 // Where the bot was when it last got somewhere, and when.
 export type Foothold = {
   at: Point;
