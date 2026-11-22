@@ -78,7 +78,7 @@ describe("lumps", () => {
   });
 });
 
-const eye = { x: 0.5, y: 1.62, z: 0.5 };
+const eye = { x: 0.5, y: 1.62, z: 0.5, in: "air" };
 const limits = { near: 6, middle: 24 };
 
 describe("describe", () => {
@@ -182,10 +182,10 @@ describe("describe", () => {
     expect(view.far.omitted).toBe(4);
   });
 
-  test("passes on the eye and the share of unloaded rays", () => {
-    const view = describeView(eye, [], 0.25, limits);
+  test("passes on the eye, what it is in and the share of unloaded rays", () => {
+    const view = describeView({ ...eye, in: "water" }, [], 0.25, limits);
 
-    expect(view.eye).toEqual({ x: 0.5, y: 1.6, z: 0.5 });
+    expect(view.eye).toEqual({ x: 0.5, y: 1.6, z: 0.5, in: "water" });
     expect(view.unloaded).toBe(0.25);
   });
 });

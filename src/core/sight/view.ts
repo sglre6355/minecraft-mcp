@@ -1,5 +1,4 @@
 import type { Ray } from "./cast.ts";
-import type { Vector } from "./rays.ts";
 import type { Seen, Span, Surfaces } from "./surfaces.ts";
 
 import { surfaces } from "./surfaces.ts";
@@ -52,8 +51,13 @@ export type Outline = {
   kinds: Array<string>;
 };
 
+// Where the eyes are, and what they are in, such as air or water.
+export type Eye = Position & {
+  in: string;
+};
+
 export type View = {
-  eye: Position;
+  eye: Eye;
   near: Near;
   middle: {
     within: number;
@@ -167,6 +171,11 @@ function nearest(blocks: Array<Seen>): number {
   return Math.min(...blocks.map((block) => block.distance));
 }
 
+// The eye as a report gives it, to one decimal place.
+export function rounded(eye: Eye): Eye {
+  return { x: oneDecimal(eye.x), y: oneDecimal(eye.y), z: oneDecimal(eye.z), in: eye.in };
+}
+
 function oneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
 }
@@ -187,7 +196,7 @@ const farCell = 6;
 // Describes what is in view, with less detail the farther away it is.
 // `limits` are the distances at which the near and the middle band end.
 export function describe(
-  eye: Vector,
+  eye: Eye,
   seen: Array<Seen>,
   unloaded: number,
   limits: { near: number; middle: number },
@@ -209,7 +218,7 @@ export function describe(
   const someWayOff = lumps(middle, middleCell).toSorted((a, b) => b.length - a.length);
   const farAway = lumps(far, farCell).toSorted((a, b) => b.length - a.length);
   return {
-    eye: { x: oneDecimal(eye.x), y: oneDecimal(eye.y), z: oneDecimal(eye.z) },
+    eye: rounded(eye),
     near: {
       within: oneDecimal(limits.near),
       surfaces: surfaces(near, { touching: true, most: nearSurfaces }),
