@@ -1,6 +1,19 @@
 import { describe, expect, test } from "bun:test";
 
-import { safeToBreak } from "./collect-block.ts";
+import { falls, safeToBreak } from "./collect-block.ts";
+
+describe("falls", () => {
+  test("holds for sand, gravel and concrete powder", () => {
+    expect(falls("sand")).toBe(true);
+    expect(falls("gravel")).toBe(true);
+    expect(falls("white_concrete_powder")).toBe(true);
+  });
+
+  test("fails for blocks that stay in the air", () => {
+    expect(falls("stone")).toBe(false);
+    expect(falls("white_concrete")).toBe(false);
+  });
+});
 
 describe("safeToBreak", () => {
   test("allows a block with nothing risky around it", () => {

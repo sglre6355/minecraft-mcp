@@ -11,6 +11,11 @@ import { movementsFor } from "./walk.ts";
 
 const falling = new Set(["sand", "red_sand", "gravel", "anvil"]);
 
+// Whether a block of this kind falls when nothing holds it up.
+export function falls(name: string): boolean {
+  return falling.has(name) || name.endsWith("concrete_powder");
+}
+
 // Whether breaking a block is free of the two usual accidents, given the names of the blocks
 // that touch it. A liquid beside it flows in. Sand or gravel above it comes down.
 export function safeToBreak(
@@ -18,7 +23,7 @@ export function safeToBreak(
   above: string | undefined,
 ): boolean {
   const floods = touching.some((name) => name === "water" || name === "lava");
-  const buries = above !== undefined && (falling.has(above) || above.endsWith("concrete_powder"));
+  const buries = above !== undefined && falls(above);
   return !floods && !buries;
 }
 
