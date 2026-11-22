@@ -1,7 +1,9 @@
 import type { Bot } from "mineflayer";
 import type { goals, PartiallyComputedPath } from "mineflayer-pathfinder";
 
-import { Movements, pathfinder } from "mineflayer-pathfinder";
+import { pathfinder } from "mineflayer-pathfinder";
+
+import { Movements } from "./movements.ts";
 
 export interface WalkOptions {
   // Break blocks that are in the way.
