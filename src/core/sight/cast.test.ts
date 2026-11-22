@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Cell, Shape } from "./cast.ts";
 
-import { cast } from "./cast.ts";
+import { cast, surrounding } from "./cast.ts";
 
 const full: Array<Shape> = [[0, 0, 0, 1, 1, 1]];
 
@@ -182,7 +182,7 @@ describe("cast", () => {
   });
 
   test("sees no side of the water the eye is in, and sees out of it", () => {
-    const pool = world({ "0,1,0": water, "1,1,0": water, "3,1,0": stone, "0,-1,0": stone });
+    const pool = world({ "0,1,0": water, "1,1,0": water, "2,1,0": stone, "0,0,0": stone });
     const under = { x: 0.5, y: 1.4, z: 0.5 };
 
     expect(cast(under, east, 16, pool).hits.map((hit) => hit.name)).toEqual(["stone"]);
@@ -217,5 +217,108 @@ describe("cast", () => {
   test("stops where the world is not loaded and says so", () => {
     expect(cast(eye, east, 16, loadedUpTo4)).toEqual({ hits: [], unloaded: true });
     expect(cast(eye, east, 2, loadedUpTo4)).toEqual({ hits: [], unloaded: false });
+  });
+});
+
+describe("cast from inside water", () => {
+  const deep: Cell = { name: "water", shapes: full, sight: "passes" };
+  const up = { x: 0, y: 1, z: 0 };
+  const diver = { x: 0.5, y: 1.5, z: 0.5 };
+
+  test("sees the surface from below, where the ray leaves the water", () => {
+    const pool = world({ "0,1,0": deep, "0,2,0": water });
+
+    expect(cast(diver, up, 16, pool).hits).toEqual([
+      {
+        x: 0,
+        y: 2,
+        z: 0,
+        name: "water",
+        distance: 1.375,
+        face: { side: "down", box: [0, 2.875, 0, 1, 2.875, 1] },
+      },
+    ]);
+  });
+
+  test("sees what stands above the surface as well", () => {
+    const pool = world({ "0,1,0": deep, "0,2,0": water, "0,5,0": stone });
+    const { hits } = cast(diver, up, 16, pool);
+
+    expect(hits.map((hit) => [hit.name, hit.face?.side])).toEqual([
+      ["water", "down"],
+      ["stone", "down"],
+    ]);
+  });
+
+  test("sees no surface where a wall ends the water", () => {
+    const pool = world({ "0,1,0": water, "1,1,0": water, "2,1,0": stone });
+    const { hits } = cast({ x: 0.5, y: 1.4, z: 0.5 }, east, 16, pool);
+
+    expect(hits.map((hit) => hit.name)).toEqual(["stone"]);
+  });
+
+  test("sees the side of the water where it borders on air", () => {
+    const column = world({ "0,1,0": deep, "1,1,0": deep });
+    const { hits } = cast(diver, east, 16, column);
+
+    expect(hits).toEqual([
+      {
+        x: 1,
+        y: 1,
+        z: 0,
+        name: "water",
+        distance: 1.5,
+        face: { side: "west", box: [2, 1, 0, 2, 2, 1] },
+      },
+    ]);
+  });
+
+  test("sees no surface from the air over the water", () => {
+    const pool = world({ "0,1,0": water });
+    const { hits } = cast({ x: 0.5, y: 1.95, z: 0.5 }, up, 16, pool);
+
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("surrounding", () => {
+  const diver = { x: 0.5, y: 1.5, z: 0.5 };
+
+  test("is air in the open", () => {
+    expect(surrounding(diver, world({}))).toBe("air");
+  });
+
+  test("is the water the eye is under", () => {
+    expect(surrounding(diver, world({ "0,1,0": water }))).toBe("water");
+  });
+
+  test("is air above the surface, in the same cell as the water", () => {
+    expect(surrounding({ x: 0.5, y: 1.95, z: 0.5 }, world({ "0,1,0": water }))).toBe("air");
+  });
+
+  test("is the water around a plant that stands in it", () => {
+    const grass: Cell = {
+      name: "seagrass",
+      shapes: full,
+      sight: "passes",
+      within: "water",
+      bodiless: true,
+    };
+
+    expect(surrounding(diver, world({ "0,1,0": grass }))).toBe("water");
+  });
+
+  test("is air beside a torch", () => {
+    const torch: Cell = { name: "torch", shapes: full, sight: "passes", bodiless: true };
+
+    expect(surrounding(diver, world({ "0,1,0": torch }))).toBe("air");
+  });
+
+  test("is the block that buries the eye", () => {
+    expect(surrounding(diver, world({ "0,1,0": stone }))).toBe("stone");
+  });
+
+  test("says so where the world is not loaded", () => {
+    expect(surrounding(diver, () => "unloaded")).toBe("unloaded");
   });
 });

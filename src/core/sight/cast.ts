@@ -40,7 +40,8 @@ export type Hit = {
   name: string;
   distance: number;
   // Missing where the ray met no side. A block without a body has none, and neither has a
-  // block that the ray enters from another of its kind.
+  // block that the ray enters from another of its kind. The surface of water that the eye is
+  // in comes as a box without thickness.
   face?: Face;
 };
 
@@ -122,6 +123,61 @@ function around(shapes: Array<Shape>, x: number, y: number, z: number): Shape {
   ];
 }
 
+// Whether a point lies in one of the boxes of the block in the cell at x, y, z.
+function holds(shapes: Array<Shape>, x: number, y: number, z: number, point: Vector): boolean {
+  return shapes.some(
+    ([x0, y0, z0, x1, y1, z1]) =>
+      point.x >= x + x0 &&
+      point.x <= x + x1 &&
+      point.y >= y + y0 &&
+      point.y <= y + y1 &&
+      point.z >= z + z0 &&
+      point.z <= z + z1,
+  );
+}
+
+// What the eye is in: the block whose body holds it, or else the liquid of its cell, or air.
+export function surrounding(eye: Vector, cellAt: CellAt): string {
+  const x = Math.floor(eye.x);
+  const y = Math.floor(eye.y);
+  const z = Math.floor(eye.z);
+  const cell = cellAt(x, y, z);
+  if (cell === "air" || cell === "unloaded") {
+    return cell;
+  }
+  if (cell.bodiless !== true && holds(cell.shapes, x, y, z, eye)) {
+    return cell.name;
+  }
+  return cell.within ?? "air";
+}
+
+type Axis = "x" | "y" | "z";
+
+// The side a ray meets when it travels along an axis, up it or down it.
+const sideMet = {
+  x: { up: "west", down: "east" },
+  y: { up: "down", down: "up" },
+  z: { up: "north", down: "south" },
+} as const;
+
+// The side of a box that a ray leaves through, as a box without thickness.
+function sideOf([x0, y0, z0, x1, y1, z1]: Shape, axis: Axis, way: "up" | "down"): Shape {
+  switch (axis) {
+    case "x": {
+      const x = way === "up" ? x1 : x0;
+      return [x, y0, z0, x, y1, z1];
+    }
+    case "y": {
+      const y = way === "up" ? y1 : y0;
+      return [x0, y, z0, x1, y, z1];
+    }
+    case "z": {
+      const z = way === "up" ? z1 : z0;
+      return [x0, y0, z, x1, y1, z];
+    }
+  }
+}
+
 // The distance along a ray from a position in cell `at` to that cell's border.
 function border(position: number, at: number, along: number): number {
   return along === 0 ? Infinity : (at + (along > 0 ? 1 : 0) - position) / along;
@@ -152,6 +208,12 @@ export function cast(eye: Vector, direction: Vector, range: number, cellAt: Cell
   // The kind of block the ray is inside. A ray that goes from water into more water sees
   // no side between the two.
   let inside: string | undefined;
+  // The see-through block that holds the eye, for as long as the ray has not left it, and the
+  // box of it that the ray was in last. Where the ray leaves it, its surface shows from the
+  // inside, as the surface of water does from below.
+  let medium: string | undefined;
+  let last: { x: number; y: number; z: number; box: Shape } | undefined;
+  let stepped: Axis = "x";
   let veils = 0;
   let entered = 0;
   while (entered <= range) {
@@ -160,8 +222,46 @@ export function cast(eye: Vector, direction: Vector, range: number, cellAt: Cell
       return { hits, unloaded: true };
     }
     if (found === "air") {
+      if (medium !== undefined && last !== undefined) {
+        // The ray left through the border between two cells.
+        const way = step[stepped] > 0 ? "up" : "down";
+        const { x, y, z } = last;
+        const face = { side: sideMet[stepped][way], box: sideOf(last.box, stepped, way) };
+        hits.push({ x, y, z, name: medium, distance: entered, face });
+        medium = undefined;
+      }
       inside = undefined;
     } else {
+      if (
+        entered === 0 &&
+        found.sight === "passes" &&
+        found.bodiless !== true &&
+        found.within === undefined &&
+        holds(found.shapes, cell.x, cell.y, cell.z, eye)
+      ) {
+        medium = found.name;
+      }
+      if (medium !== undefined && found.name === medium) {
+        const box = around(found.shapes, cell.x, cell.y, cell.z);
+        const top = box[4];
+        // The top of the block lies under the top of its cell, as the surface of water does.
+        const leaves = direction.y > 0 ? (top - eye.y) / direction.y : Infinity;
+        const leftCell = Math.min(next.x, next.y, next.z);
+        if (top < cell.y + 1 && leaves < leftCell) {
+          hits.push({
+            ...cell,
+            name: medium,
+            distance: leaves,
+            face: { side: "down", box: [box[0], top, box[2], box[3], top, box[5]] },
+          });
+          medium = undefined;
+        } else {
+          last = { ...cell, box };
+        }
+      } else if (medium !== undefined && found.within !== medium) {
+        medium = undefined;
+      }
+
       const entry = enter(eye, direction, found.shapes, cell.x, cell.y, cell.z);
       if (entry === undefined) {
         // The eye is in the block, or the ray slips past its boxes.
@@ -189,18 +289,15 @@ export function cast(eye: Vector, direction: Vector, range: number, cellAt: Cell
     }
 
     if (next.x <= next.y && next.x <= next.z) {
-      entered = next.x;
-      cell.x += step.x;
-      next.x += apart.x;
+      stepped = "x";
     } else if (next.y <= next.z) {
-      entered = next.y;
-      cell.y += step.y;
-      next.y += apart.y;
+      stepped = "y";
     } else {
-      entered = next.z;
-      cell.z += step.z;
-      next.z += apart.z;
+      stepped = "z";
     }
+    entered = next[stepped];
+    cell[stepped] += step[stepped];
+    next[stepped] += apart[stepped];
   }
   return { hits, unloaded: false };
 }
