@@ -17,6 +17,7 @@ import { hunger } from "./events/hunger.ts";
 import { life } from "./events/life.ts";
 import { oxygen } from "./events/oxygen.ts";
 import { definePlugin } from "./plugin-api.ts";
+import { blockAt } from "./queries/block-at.ts";
 import { craftable } from "./queries/craftable.ts";
 import { craftingPlan } from "./queries/crafting-plan.ts";
 import { findBlocks } from "./queries/find-blocks.ts";
@@ -49,7 +50,16 @@ export const builtin = definePlugin({
     takeFromChest,
     sleep,
   ],
-  queries: [status, inventory, lookAround, nearbyEntities, findBlocks, craftable, craftingPlan],
+  queries: [
+    status,
+    inventory,
+    lookAround,
+    nearbyEntities,
+    findBlocks,
+    blockAt,
+    craftable,
+    craftingPlan,
+  ],
   commands: [say],
   reflexes: [drowning],
   eventSources: [chat, damage, oxygen, hunger, life],
