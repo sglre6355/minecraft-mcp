@@ -94,6 +94,18 @@ describe("noAnswer", () => {
     );
   });
 
+  test("says so when the position is out of view", () => {
+    expect(noAnswer(8, { block: "unseen", under: "unseen" }, [])).toBe(
+      "The search for a path ran out of time without an answer. The bot is 8.0 blocks away. The position is not in view.",
+    );
+  });
+
+  test("names the block at the position when only the one under it is out of view", () => {
+    expect(noAnswer(8, { block: "air", under: "unseen" }, [])).toBe(
+      "The search for a path ran out of time without an answer. The bot is 8.0 blocks away. The position holds air. What is under it is not in view.",
+    );
+  });
+
   test("says so when the position is not loaded", () => {
     expect(noAnswer(300, { block: "unloaded", under: "unloaded" }, [])).toBe(
       "The search for a path ran out of time without an answer. The bot is 300.0 blocks away. The position is in a part of the world that is not loaded.",

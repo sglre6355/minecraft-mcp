@@ -16,7 +16,7 @@ export type PathReport = Route & {
 export const pathTo = defineQuery({
   name: "path_to",
   description:
-    "Search for the path that move_to would take with the same input, without moving the bot. `answer` is `reaches`, or `unreachable` when the search went through every place the bot can get to, or `undecided` when the search ran out of time. `end` is the block the path ends in, and `left` is how many blocks lie between it and the position. `steps` counts the steps of the path, `jumps` the steps that jump over a gap, and `breaks` and `places` the blocks the path breaks and places. `target` names the block at the position and the one under it, or `unloaded`. The path is a plan. The bot can still fail a step of it, such as a long jump.",
+    "Search for the path that move_to would take with the same input, without moving the bot. `answer` is `reaches`, or `unreachable` when the search went through every place the bot can get to, or `undecided` when the search ran out of time. `end` is the block the path ends in, and `left` is how many blocks lie between it and the position. `steps` counts the steps of the path, `jumps` the steps that jump over a gap, and `breaks` and `places` the blocks the path breaks and places. `target` names the block at the position and the one under it, with `unseen` for one the bot cannot see and `unloaded` for one in a part of the world that is not loaded. The path is a plan. The bot can still fail a step of it, such as a long jump.",
   input: destination,
   async run({ bot }, input): Promise<PathReport> {
     const goal = new goals.GoalNear(input.x, input.y, input.z, input.range);

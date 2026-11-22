@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { Route } from "./walk.ts";
 
+import { sees, sightOf } from "../queries/look.ts";
 import { defineAction } from "./action.ts";
 import { vectorAt } from "./reach.ts";
 import { findRoute, isUndecided, walk } from "./walk.ts";
@@ -50,7 +51,7 @@ export function waysLeftOff(input: {
 }
 
 // The names of the block at a position and of the one under it. `unloaded` stands for a
-// block in a part of the world that is not loaded.
+// block in a part of the world that is not loaded, and `unseen` for one the bot cannot see.
 export type Spot = {
   block: string;
   under: string;
@@ -58,12 +59,17 @@ export type Spot = {
 
 export function spotAt(bot: Bot, position: Point): Spot {
   const x = Math.floor(position.x);
-  const y = Math.floor(position.y);
   const z = Math.floor(position.z);
-  return {
-    block: bot.blockAt(vectorAt(bot, x, y, z))?.name ?? "unloaded",
-    under: bot.blockAt(vectorAt(bot, x, y - 1, z))?.name ?? "unloaded",
+  const sight = sightOf(bot);
+  const nameAt = (y: number) => {
+    const block = bot.blockAt(vectorAt(bot, x, y, z));
+    if (block === null) {
+      return "unloaded";
+    }
+    return sees(sight, x, y, z) ? block.name : "unseen";
   };
+  const y = Math.floor(position.y);
+  return { block: nameAt(y), under: nameAt(y - 1) };
 }
 
 function away(left: number): string {
@@ -71,9 +77,16 @@ function away(left: number): string {
 }
 
 function holds(spot: Spot): string {
-  return spot.block === "unloaded"
-    ? "The position is in a part of the world that is not loaded."
-    : `The position holds ${spot.block}, and under it is ${spot.under}.`;
+  if (spot.block === "unloaded") {
+    return "The position is in a part of the world that is not loaded.";
+  }
+  if (spot.block === "unseen") {
+    return "The position is not in view.";
+  }
+  if (spot.under === "unseen") {
+    return `The position holds ${spot.block}. What is under it is not in view.`;
+  }
+  return `The position holds ${spot.block}, and under it is ${spot.under}.`;
 }
 
 function hint(off: Array<string>): string {
