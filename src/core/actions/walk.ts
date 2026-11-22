@@ -59,9 +59,17 @@ export function standsStill(last: Foothold, now: number): boolean {
   return now - last.since >= standstillMs;
 }
 
+// The name of the error a walk fails with when the search for a path runs out of time before
+// it finds one or rules one out.
+const undecided = "Undecided";
+
+export function isUndecided(error: unknown): boolean {
+  return error instanceof Error && error.name === undecided;
+}
+
 // Walks the bot to the goal, finding a path around obstacles.
-// Returns false when no path leads there. Throws when the signal aborts, and when the bot
-// stays in one place for too long.
+// Returns false when no path leads there. Throws when the signal aborts, when the bot stays
+// in one place for too long, and when the search for a path runs out of time.
 export async function walk(
   bot: Bot,
   goal: goals.Goal,
@@ -75,16 +83,34 @@ export async function walk(
     bot.pathfinder.setGoal(null);
   };
   signal.addEventListener("abort", stop, { once: true });
-  // When the search ends short of the goal, `goto` rejects if a path leads part of the way
-  // and resolves if none leads anywhere.
-  let stuck = false;
+
+  // The pathfinder's own `goto` takes a search that is still going on for one that found
+  // no path, whenever the bot stands at the nearest place found so far.
+  const ending = Promise.withResolvers<"arrived" | "unreachable" | "undecided" | "stopped">();
   // The steps still ahead. The pathfinder takes each one off as the bot makes it.
   let ahead: PartiallyComputedPath["path"] = [];
-  const watch = (result: PartiallyComputedPath) => {
-    stuck = result.path.length === 0 && result.status !== "success";
+  const onPath = (result: PartiallyComputedPath) => {
     ahead = result.path;
+    if (result.status === "noPath") {
+      ending.resolve("unreachable");
+    } else if (result.status === "timeout") {
+      ending.resolve("undecided");
+    } else if (result.status === "success" && result.path.length === 0) {
+      // The bot stands where the goal wants it.
+      ending.resolve("arrived");
+    }
   };
-  bot.on("path_update", watch);
+  const onReached = () => {
+    ending.resolve("arrived");
+  };
+  const onGoal = (next: goals.Goal | null) => {
+    if (next !== goal) {
+      ending.resolve("stopped");
+    }
+  };
+  bot.on("path_update", onPath);
+  bot.on("goal_reached", onReached);
+  bot.on("goal_updated", onGoal);
 
   // The pathfinder plans steps that the bot then does not make, and plans them again for ever.
   let standstill: string | undefined;
@@ -105,23 +131,29 @@ export async function walk(
     stop();
   }, 500);
 
+  let ended: Awaited<typeof ending.promise>;
   try {
     signal.throwIfAborted();
-    await bot.pathfinder.goto(goal);
-  } catch (error) {
-    if (standstill !== undefined && !signal.aborted) {
-      throw new Error(standstill, { cause: error });
-    }
-    if (!(error instanceof Error && error.name === "NoPath")) {
-      throw error;
-    }
-    stuck = true;
+    bot.pathfinder.setGoal(goal);
+    ended = await ending.promise;
   } finally {
     clearInterval(watching);
     signal.removeEventListener("abort", stop);
-    bot.off("path_update", watch);
+    bot.off("path_update", onPath);
+    bot.off("goal_reached", onReached);
+    bot.off("goal_updated", onGoal);
     // A goal left in place would pull the bot back whenever something moves it.
     stop();
   }
-  return !stuck;
+
+  if (ended === "stopped") {
+    signal.throwIfAborted();
+    throw new Error(standstill ?? "The walk was stopped before it reached the goal.");
+  }
+  if (ended === "undecided") {
+    const failure = new Error("The search for a path ran out of time without an answer.");
+    failure.name = undecided;
+    throw failure;
+  }
+  return ended === "arrived";
 }
