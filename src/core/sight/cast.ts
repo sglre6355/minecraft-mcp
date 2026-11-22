@@ -1,5 +1,7 @@
 import type { Vector } from "./rays.ts";
 
+import { coneOver, directions } from "./rays.ts";
+
 // A box as its lowest and highest corner, x0, y0, z0, x1, y1, z1.
 export type Shape = [number, number, number, number, number, number];
 
@@ -300,4 +302,37 @@ export function cast(eye: Vector, direction: Vector, range: number, cellAt: Cell
     next[stepped] += apart[stepped];
   }
   return { hits, unloaded: false };
+}
+
+// How many rays go out to one cell: in a cone that just covers the cell, or all around when
+// the eye is in the cell or right beside it. Either way they lie closer together than the
+// rays of a look, so that a cell which a look reports counts as in view here too.
+const raysInCone = 2000;
+const raysAround = 16_000;
+
+// From the middle of a cell to its corners.
+const cellRadius = Math.sqrt(3) / 2;
+
+// Whether a straight line from the eye reaches into a cell before a block ends it. The cell
+// of a block in view counts, and so does a cell of air that sight passes through.
+export function inView(eye: Vector, at: Vector, range: number, cellAt: CellAt): boolean {
+  let reached = false;
+  const watching: CellAt = (x, y, z) => {
+    reached ||= x === at.x && y === at.y && z === at.z;
+    return cellAt(x, y, z);
+  };
+  const middle = { x: at.x + 0.5, y: at.y + 0.5, z: at.z + 0.5 };
+  const { axis, halfAngle, away } = coneOver(eye, middle, cellRadius);
+  if (away - cellRadius > range) {
+    return false;
+  }
+  const reach = Math.min(range, away + cellRadius);
+  const count = halfAngle === 180 ? raysAround : raysInCone;
+  for (const direction of directions(count, axis, halfAngle)) {
+    cast(eye, direction, reach, watching);
+    if (reached) {
+      return true;
+    }
+  }
+  return false;
 }

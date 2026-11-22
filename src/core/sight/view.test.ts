@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { Hit, Shape, Side } from "./cast.ts";
 import type { Seen } from "./surfaces.ts";
 
-import { describe as describeView, gather, lumps } from "./view.ts";
+import { describe as describeView, gather, lumps, spotted } from "./view.ts";
 
 function hit(x: number, y: number, z: number, distance: number, side: Side = "up"): Hit {
   const face = { side, box: [x, y, z, x + 1, y + 1, z + 1] } satisfies Hit["face"];
@@ -75,6 +75,37 @@ describe("lumps", () => {
 
     expect(lumps(blocks, 1)).toHaveLength(3);
     expect(lumps(blocks, 6)).toHaveLength(2);
+  });
+});
+
+describe("spotted", () => {
+  const blocks = [
+    seen("oak_sign", 9, 0, 0, 9.04),
+    seen("stone", 1, 0, 0, 1),
+    seen("oak_sign", 3, 0, 0, 3.16),
+    seen("oak_sign", 6, 1, 2, 6.5),
+  ];
+
+  test("lists the blocks of one kind, nearest first, with how far away they are", () => {
+    expect(spotted(blocks, "oak_sign", 10)).toEqual({
+      positions: [
+        { x: 3, y: 0, z: 0, distance: 3.2 },
+        { x: 6, y: 1, z: 2, distance: 6.5 },
+        { x: 9, y: 0, z: 0, distance: 9 },
+      ],
+      omitted: 0,
+    });
+  });
+
+  test("keeps the nearest ones and counts the rest", () => {
+    const found = spotted(blocks, "oak_sign", 2);
+
+    expect(found.positions.map((block) => block.x)).toEqual([3, 6]);
+    expect(found.omitted).toBe(1);
+  });
+
+  test("is empty when no block of the kind is in view", () => {
+    expect(spotted(blocks, "chest", 10)).toEqual({ positions: [], omitted: 0 });
   });
 });
 

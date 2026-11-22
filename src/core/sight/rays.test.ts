@@ -1,9 +1,25 @@
 import { describe, expect, test } from "bun:test";
 
-import { directions, zoom } from "./rays.ts";
+import { coneOver, directions, zoom } from "./rays.ts";
 
 const up = { x: 0, y: 1, z: 0 };
 const east = { x: 1, y: 0, z: 0 };
+
+describe("coneOver", () => {
+  const eye = { x: 0, y: 0, z: 0 };
+
+  test("goes all around when the eye is in the ball", () => {
+    expect(coneOver(eye, { x: 2, y: 1, z: 0 }, 8)).toMatchObject({ halfAngle: 180 });
+  });
+
+  test("points at a ball some way off and is just wide enough for it", () => {
+    const cone = coneOver(eye, { x: 20, y: 0, z: 0 }, 10);
+
+    expect(cone.axis).toEqual({ x: 20, y: 0, z: 0 });
+    expect(cone.halfAngle).toBeCloseTo(30);
+    expect(cone.away).toBe(20);
+  });
+});
 
 describe("directions", () => {
   test("gives as many rays as asked for, each of length one", () => {

@@ -256,3 +256,33 @@ export function describe(
     unloaded: Math.round(unloaded * 100) / 100,
   };
 }
+
+// A block of the kind that was looked for, and how far away it is.
+export type Spotted = Position & {
+  distance: number;
+};
+
+// The blocks of one kind that are in view.
+export type FindView = {
+  eye: Eye;
+  block: string;
+  // The nearest ones, nearest first.
+  positions: Array<Spotted>;
+  // How many more are in view.
+  omitted: number;
+  // The share of the view that ends at the edge of the loaded world.
+  unloaded: number;
+};
+
+// The blocks of one kind among those in view, nearest first.
+export function spotted(seen: Array<Seen>, name: string, most: number) {
+  const found = seen
+    .filter((block) => block.name === name)
+    .toSorted((a, b) => a.distance - b.distance);
+  return {
+    positions: found
+      .slice(0, most)
+      .map(({ x, y, z, distance }) => ({ x, y, z, distance: oneDecimal(distance) })),
+    omitted: Math.max(0, found.length - most),
+  };
+}

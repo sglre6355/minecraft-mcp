@@ -49,6 +49,17 @@ export function directions(count: number, axis: Vector, halfAngle: number): Arra
   return rays;
 }
 
+// The cone of rays that takes in a ball around a point, as its axis and its half angle in
+// degrees. Rays go out all around when the eye is in the ball or right at it.
+export function coneOver(eye: Vector, middle: Vector, radius: number) {
+  const axis = { x: middle.x - eye.x, y: middle.y - eye.y, z: middle.z - eye.z };
+  const away = Math.hypot(axis.x, axis.y, axis.z);
+  if (away <= radius + 1) {
+    return { axis: { x: 0, y: 1, z: 0 }, halfAngle: 180, away };
+  }
+  return { axis, halfAngle: (Math.asin(radius / away) * 180) / Math.PI, away };
+}
+
 // How many times closer together the rays of a cone lie than those of a look all around.
 export function zoom(halfAngle: number): number {
   return Math.sqrt(2 / (1 - Math.cos(radians(halfAngle))));

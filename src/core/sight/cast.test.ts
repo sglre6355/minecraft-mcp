@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Cell, Shape } from "./cast.ts";
 
-import { cast, surrounding } from "./cast.ts";
+import { cast, inView, surrounding } from "./cast.ts";
 
 const full: Array<Shape> = [[0, 0, 0, 1, 1, 1]];
 
@@ -278,6 +278,56 @@ describe("cast from inside water", () => {
     const { hits } = cast({ x: 0.5, y: 1.95, z: 0.5 }, up, 16, pool);
 
     expect(hits).toEqual([]);
+  });
+});
+
+// A stone block at x = 6 behind a wall across x = 3, which may have a gap in front of the eye.
+function behindWall(of: Cell, gap = false) {
+  const cells = new Map([["6,1,0", stone]]);
+  for (let y = -6; y <= 8; y += 1) {
+    for (let z = -7; z <= 7; z += 1) {
+      if (!gap || y !== 1 || z !== 0) {
+        cells.set(`3,${y},${z}`, of);
+      }
+    }
+  }
+  return world(Object.fromEntries(cells));
+}
+
+describe("inView", () => {
+  const viewer = { x: 0.5, y: 1.5, z: 0.5 };
+
+  test("holds for a block in the open", () => {
+    expect(inView(viewer, { x: 5, y: 1, z: 0 }, 16, world({ "5,1,0": stone }))).toBe(true);
+  });
+
+  test("holds for a cell of air that nothing hides", () => {
+    expect(inView(viewer, { x: 5, y: 1, z: 0 }, 16, world({}))).toBe(true);
+  });
+
+  test("holds for the cell the eye is in", () => {
+    expect(inView(viewer, { x: 0, y: 1, z: 0 }, 16, world({}))).toBe(true);
+  });
+
+  test("fails for a block behind a wall", () => {
+    expect(inView(viewer, { x: 6, y: 1, z: 0 }, 16, behindWall(stone))).toBe(false);
+    expect(inView(viewer, { x: 3, y: 1, z: 0 }, 16, behindWall(stone))).toBe(true);
+  });
+
+  test("holds for a block behind glass", () => {
+    expect(inView(viewer, { x: 6, y: 1, z: 0 }, 16, behindWall(glass))).toBe(true);
+  });
+
+  test("holds for a block seen through a gap in a wall", () => {
+    expect(inView(viewer, { x: 6, y: 1, z: 0 }, 16, behindWall(stone, true))).toBe(true);
+  });
+
+  test("fails beyond the reach of sight", () => {
+    expect(inView(viewer, { x: 40, y: 1, z: 0 }, 16, world({ "40,1,0": stone }))).toBe(false);
+  });
+
+  test("fails where the world between is not loaded", () => {
+    expect(inView(viewer, { x: 8, y: 1, z: 0 }, 16, loadedUpTo4)).toBe(false);
   });
 });
 
