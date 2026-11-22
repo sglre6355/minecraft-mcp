@@ -23,6 +23,7 @@ import { craftingPlan } from "./queries/crafting-plan.ts";
 import { findBlocks } from "./queries/find-blocks.ts";
 import { inventory } from "./queries/inventory.ts";
 import { lookAround } from "./queries/look-around.ts";
+import { look } from "./queries/look.ts";
 import { nearbyEntities } from "./queries/nearby-entities.ts";
 import { readSign } from "./queries/read-sign.ts";
 import { status } from "./queries/status.ts";
@@ -54,6 +55,7 @@ export const builtin = definePlugin({
   queries: [
     status,
     inventory,
+    look,
     lookAround,
     nearbyEntities,
     findBlocks,
