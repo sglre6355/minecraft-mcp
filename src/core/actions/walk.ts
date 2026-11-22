@@ -47,7 +47,8 @@ export async function walk(
     bot.pathfinder.setGoal(null);
   };
   signal.addEventListener("abort", stop, { once: true });
-  // `goto` also resolves when the search ends with nowhere to go.
+  // When the search ends short of the goal, `goto` rejects if a path leads part of the way
+  // and resolves if none leads anywhere.
   let stuck = false;
   const watch = (result: PartiallyComputedPath) => {
     stuck = result.path.length === 0 && result.status !== "success";
@@ -56,6 +57,11 @@ export async function walk(
   try {
     signal.throwIfAborted();
     await bot.pathfinder.goto(goal);
+  } catch (error) {
+    if (!(error instanceof Error && error.name === "NoPath")) {
+      throw error;
+    }
+    stuck = true;
   } finally {
     signal.removeEventListener("abort", stop);
     bot.off("path_update", watch);
