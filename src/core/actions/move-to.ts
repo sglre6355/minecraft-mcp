@@ -18,7 +18,7 @@ export const moveTo = defineAction({
       .default(false)
       .describe("Place blocks from the inventory to bridge gaps and to climb."),
     maxDropDown: z.int().min(0).default(3).describe("The highest drop to take, in blocks."),
-    allowParkour: z.boolean().default(false).describe("Jump across gaps."),
+    allowParkour: z.boolean().default(true).describe("Jump across gaps of up to three blocks."),
   }),
   progress: z.object({
     distance: z.number().describe("Blocks left to the position."),

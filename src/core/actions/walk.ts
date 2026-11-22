@@ -28,7 +28,7 @@ export function movementsFor(bot: Bot, options: WalkOptions = {}): Movements {
     movements.allow1by1towers = false;
   }
   movements.maxDropDown = options.maxDropDown ?? 3;
-  movements.allowParkour = options.allowParkour ?? false;
+  movements.allowParkour = options.allowParkour ?? true;
   return movements;
 }
 
