@@ -22,9 +22,16 @@ const fullCell: Array<Shape> = [[0, 0, 0, 1, 1, 1]];
 // The surface of water and lava lies a little under the top of its cell.
 const liquidSurface: Array<Shape> = [[0, 0, 0, 1, 0.875, 1]];
 
-// Solid blocks that one can see through.
+// Blocks that one can see through: clear ones, and ones made of bars or rails with gaps.
 function isClear(name: string): boolean {
-  return name.includes("glass") || name === "ice" || name === "frosted_ice";
+  return (
+    name.includes("glass") ||
+    name === "ice" ||
+    name === "frosted_ice" ||
+    name === "iron_bars" ||
+    name.endsWith("_fence") ||
+    name.endsWith("_fence_gate")
+  );
 }
 
 // These blocks hold water without being waterlogged.

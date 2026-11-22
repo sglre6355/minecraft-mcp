@@ -36,6 +36,21 @@ describe("cellOf", () => {
     expect(cellOf({ name: "ice", shapes: full })).toMatchObject({ sight: "passes" });
   });
 
+  test("lets sight through bars, fences and gates, which have gaps", () => {
+    const plane: Array<Shape> = [[0.4375, 0, 0, 0.5625, 1, 1]];
+
+    expect(cellOf({ name: "iron_bars", shapes: plane })).toMatchObject({ sight: "passes" });
+    expect(cellOf({ name: "oak_fence", shapes: plane })).toMatchObject({ sight: "passes" });
+    expect(cellOf({ name: "nether_brick_fence", shapes: plane })).toMatchObject({
+      sight: "passes",
+    });
+    expect(cellOf({ name: "oak_fence_gate", shapes: plane })).toMatchObject({ sight: "passes" });
+  });
+
+  test("ends sight at a wall, which has no gaps", () => {
+    expect(cellOf({ name: "cobblestone_wall", shapes: full })).toMatchObject({ sight: "ends" });
+  });
+
   test("ends sight at ice that is not clear", () => {
     expect(cellOf({ name: "packed_ice", shapes: full })).toMatchObject({ sight: "ends" });
   });
