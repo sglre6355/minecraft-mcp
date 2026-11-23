@@ -1,7 +1,12 @@
 import { attack } from "./actions/attack.ts";
 import { breakBlock } from "./actions/break-block.ts";
 import { collectBlock } from "./actions/collect-block.ts";
-import { putInContainer, takeFromContainer, viewContainer } from "./actions/container.ts";
+import {
+  arrangeContainer,
+  putInContainer,
+  takeFromContainer,
+  viewContainer,
+} from "./actions/container.ts";
 import { craft } from "./actions/craft.ts";
 import { clearFurnace, smelt } from "./actions/furnace.ts";
 import { consume, discard, equip, give } from "./actions/inventory.ts";
@@ -50,6 +55,7 @@ export const builtin = definePlugin({
     viewContainer,
     putInContainer,
     takeFromContainer,
+    arrangeContainer,
     sleep,
   ],
   queries: [

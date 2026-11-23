@@ -103,7 +103,8 @@ export function shortfall(
     .join(" ");
 }
 
-function same(stack: Held, name: string, label: string, details: Details): boolean {
+// Whether a stack is what a name, a label and details stand for in a list of slots.
+export function matches(stack: Held, name: string, label: string, details: Details): boolean {
   return (
     stack.name === name && stack.label === label && canonical(stack.details) === canonical(details)
   );
@@ -130,7 +131,7 @@ export function plan(
     const label = entry.label ?? labelOf(entry.name);
     const details = entry.details ?? {};
     const fits = (stack: Held | null | undefined): stack is Held =>
-      stack !== null && stack !== undefined && same(stack, entry.name, label, details);
+      stack !== null && stack !== undefined && matches(stack, entry.name, label, details);
 
     const everywhere = from.flatMap((stack, slot) => (fits(stack) ? [slot] : []));
     const named = entry.sources?.map(({ row, column }) => row * sourceColumns + column);

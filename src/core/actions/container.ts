@@ -3,7 +3,10 @@ import type { Bot } from "mineflayer";
 import { z } from "zod";
 
 import { columnsOf, itemNamed, layout, listedNote, slotsNote } from "../items.ts";
-import { held, plan, shortfall } from "../moves.ts";
+import type { Pile } from "../arrange.ts";
+
+import { arrange as planned, misfit } from "../arrange.ts";
+import { held, matches, plan, shortfall } from "../moves.ts";
 import { within } from "../wait.ts";
 import { defineAction } from "./action.ts";
 import { approach, blockAt, nearestBlock } from "./reach.ts";
@@ -74,25 +77,36 @@ async function withContainer<Result>(
   }
 }
 
+// What lies in which slot of an open container. `block` is the name of its block.
+function shown(container: Container, block: string) {
+  const own = container.slots.slice(0, container.inventoryStart);
+  const columns = columnsOf(own.length);
+  return {
+    container: block,
+    rows: own.length / columns,
+    columns,
+    free: own.filter((stack) => stack === null).length,
+    slots: layout(own, columns),
+  };
+}
+
 export const viewContainer = defineAction({
   name: "view_container",
   description: `Walk to a container, open it and show what lies in which slot. \`container\` names the block. A chest has three rows of nine slots, and two chests side by side form one container of six rows. ${kinds} ${slotsNote} ${listedNote}`,
   input: z.object({ coordinates }),
   run: ({ bot, signal }, input) =>
-    withContainer(bot, signal, input.coordinates, (container, name) => {
-      const held = container.slots.slice(0, container.inventoryStart);
-      const columns = columnsOf(held.length);
-      return Promise.resolve({
-        container: name,
-        rows: held.length / columns,
-        columns,
-        free: held.filter((stack) => stack === null).length,
-        slots: layout(held, columns),
-      });
-    }),
+    withContainer(bot, signal, input.coordinates, (container, name) =>
+      Promise.resolve(shown(container, name)),
+    ),
 });
 
 const place = z.object({ row: z.int().min(0), column: z.int().min(0) });
+
+const details = z.object({
+  lore: z.array(z.string()).optional(),
+  enchantments: z.array(z.object({ name: z.string(), level: z.number() })).optional(),
+  data: z.record(z.string(), z.json()).optional(),
+});
 
 const items = z
   .array(
@@ -102,12 +116,7 @@ const items = z
         .string()
         .optional()
         .describe("The `label` of the stack. Leave it out for a stack that was given no name."),
-      details: z
-        .object({
-          lore: z.array(z.string()).optional(),
-          enchantments: z.array(z.object({ name: z.string(), level: z.number() })).optional(),
-          data: z.record(z.string(), z.json()).optional(),
-        })
+      details: details
         .optional()
         .describe("The `details` of the stack. Leave them out for a stack that has none."),
       count: z.int().min(1).optional().describe("How many. Defaults to all that match."),
@@ -239,5 +248,108 @@ export const takeFromContainer = defineAction({
   run: ({ bot, signal }, input) =>
     withContainer(bot, signal, input.coordinates, (container, name) =>
       move(bot, container, input.items, "out", name),
+    ),
+});
+
+const arranged = z.array(
+  z.object({
+    row: z.int().min(0),
+    column: z.int().min(0),
+    name: z.string(),
+    label: z.string().optional(),
+    details: details.optional(),
+    count: z.int().min(1),
+  }),
+);
+
+// Brings the slots of an open container into a layout, with the clicks a player would make.
+async function arrange(
+  bot: Bot,
+  container: Container,
+  wanted: z.infer<typeof arranged>,
+  block: string,
+) {
+  const own = container.slots.slice(0, container.inventoryStart).map(held);
+  const columns = columnsOf(own.length);
+  const rows = own.length / columns;
+  const want: Array<Pile | null> = own.map(() => null);
+  const called = new Map<string, string>();
+
+  for (const entry of wanted) {
+    const slot = entry.row * columns + entry.column;
+    if (entry.row >= rows || entry.column >= columns) {
+      throw new Error(
+        `The ${block} has no slot at row ${entry.row}, column ${entry.column}. It has ${rows} rows of ${columns}, counted from 0.`,
+      );
+    }
+    if (want[slot] !== null) {
+      throw new Error(
+        `The layout names the slot at row ${entry.row}, column ${entry.column} twice.`,
+      );
+    }
+    const label = entry.label ?? itemNamed(bot, entry.name).displayName;
+    const marked = entry.label !== undefined || entry.details !== undefined;
+    const name = marked ? `${entry.name} labeled "${label}"` : entry.name;
+    const kinds = new Set(
+      own.flatMap((stack) =>
+        stack !== null && matches(stack, entry.name, label, entry.details ?? {})
+          ? [`${stack.kind} ${stack.stackSize}`]
+          : [],
+      ),
+    );
+    const [found, other] = [...kinds];
+    if (found === undefined) {
+      throw new Error(`The ${block} holds no ${name}. A layout can only use what is in it.`);
+    }
+    if (other !== undefined) {
+      throw new Error(
+        `The ${block} holds stacks of ${name} that look the same and do not go into one slot. Arrange them by hand with take_from_container and put_in_container.`,
+      );
+    }
+    const size = Number(found.slice(found.lastIndexOf(" ") + 1));
+    const kind = found.slice(0, found.lastIndexOf(" "));
+    want[slot] = { kind, count: entry.count, size };
+    called.set(kind, name);
+  }
+
+  const now = own.map((stack) =>
+    stack === null ? null : { kind: stack.kind, count: stack.count, size: stack.stackSize },
+  );
+  for (const stack of own) {
+    if (stack !== null && !called.has(stack.kind)) {
+      called.set(stack.kind, stack.name);
+    }
+  }
+  const problem = misfit(now, want, (kind) => called.get(kind) ?? kind);
+  if (problem !== undefined) {
+    throw new Error(problem);
+  }
+
+  for (const click of planned(now, want)) {
+    await bot.clickWindow(click.slot, click.button === "left" ? 0 : 1, 0);
+  }
+  await Bun.sleep(settleMs);
+
+  const after = container.slots.slice(0, container.inventoryStart).map(held);
+  const reached = after.every(
+    (stack, slot) =>
+      (stack?.kind ?? null) === (want[slot]?.kind ?? null) &&
+      (stack?.count ?? 0) === (want[slot]?.count ?? 0),
+  );
+  if (!reached) {
+    throw new Error(
+      `The ${block} did not end up in the layout. Something else changed it meanwhile. Look at it again.`,
+    );
+  }
+  return shown(container, block);
+}
+
+export const arrangeContainer = defineAction({
+  name: "arrange_container",
+  description: `Walk to a container and bring its contents into a layout. \`slots\` has the form that view_container returns: each slot that is to hold something, with its \`row\`, \`column\`, \`name\` and \`count\`, and with \`label\` and \`details\` when the stack has them. Slots that are left out end up empty. The layout must hold exactly what the container holds, so nothing enters or leaves it. Stacks of one kind can be joined and split. The answer shows the container afterwards. ${kinds}`,
+  input: z.object({ coordinates, slots: arranged }),
+  run: ({ bot, signal }, input) =>
+    withContainer(bot, signal, input.coordinates, (container, name) =>
+      arrange(bot, container, input.slots, name),
     ),
 });
