@@ -140,6 +140,31 @@ export function listed(stack: Carried): Listed {
   };
 }
 
+// A slot of a container or of the inventory, counted from 0 at the top left.
+export type Place = { row: number; column: number };
+
+// A stack with the slot it lies in.
+export type Slotted = Place & Listed;
+
+// What a tool that shows slots says about them.
+export const slotsNote =
+  "`slots` lists the slots that hold something, each with its `row` and `column`, counted from 0 at the top left. Empty slots are left out, and `free` counts them.";
+
+// How many slots a row has, given how many slots there are. A dispenser and a dropper have
+// three rows of three, and a hopper has one row of five.
+export function columnsOf(slots: number): number {
+  return slots === 9 ? 3 : slots === 5 ? 5 : 9;
+}
+
+// The stacks of some slots with where each lies, row by row. An empty slot is null.
+export function layout(slots: ReadonlyArray<Carried | null>, columns: number): Array<Slotted> {
+  return slots.flatMap((stack, index) =>
+    stack === null
+      ? []
+      : [{ row: Math.floor(index / columns), column: index % columns, ...listed(stack) }],
+  );
+}
+
 // Two stacks with the same key are the same to a reader of a list.
 function keyOf(stack: Listed): string {
   return JSON.stringify([stack.name, stack.label, stack.details]);

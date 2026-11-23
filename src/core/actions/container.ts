@@ -2,7 +2,15 @@ import type { Bot } from "mineflayer";
 
 import { z } from "zod";
 
-import { countByName, countOf, itemNamed, list, listed, listedNote } from "../items.ts";
+import {
+  columnsOf,
+  countByName,
+  countOf,
+  itemNamed,
+  layout,
+  listedNote,
+  slotsNote,
+} from "../items.ts";
 import { within } from "../wait.ts";
 import { defineAction } from "./action.ts";
 import { approach, blockAt, nearestBlock } from "./reach.ts";
@@ -67,7 +75,7 @@ async function withContainer<Result>(
   try {
     signal.throwIfAborted();
     const result = await work(container, block.name);
-    return { ...result, coordinates: { x, y, z: zCoordinate } };
+    return { coordinates: { x, y, z: zCoordinate }, ...result };
   } finally {
     await container.close();
   }
@@ -75,12 +83,20 @@ async function withContainer<Result>(
 
 export const viewContainer = defineAction({
   name: "view_container",
-  description: `Walk to a container, open it and list what is inside. ${kinds} ${listedNote}`,
+  description: `Walk to a container, open it and show what lies in which slot. \`container\` names the block. A chest has three rows of nine slots, and two chests side by side form one container of six rows. ${kinds} ${slotsNote} ${listedNote}`,
   input: z.object({ coordinates }),
   run: ({ bot, signal }, input) =>
-    withContainer(bot, signal, input.coordinates, (container) =>
-      Promise.resolve({ items: list(container.containerItems().map(listed)) }),
-    ),
+    withContainer(bot, signal, input.coordinates, (container, name) => {
+      const held = container.slots.slice(0, container.inventoryStart);
+      const columns = columnsOf(held.length);
+      return Promise.resolve({
+        container: name,
+        rows: held.length / columns,
+        columns,
+        free: held.filter((stack) => stack === null).length,
+        slots: layout(held, columns),
+      });
+    }),
 });
 
 const count = z.int().min(1).optional();

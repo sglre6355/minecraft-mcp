@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { countByName, gained, list, listed } from "./items.ts";
+import { columnsOf, countByName, gained, layout, list, listed } from "./items.ts";
 
 // A stack as Mineflayer gives it, with nothing of its own.
 const stone = {
@@ -137,6 +137,51 @@ describe("listed", () => {
     expect(label).toBe(`${"x".repeat(100)} (400 more characters)`);
     expect(details.lore).toEqual([`${"x".repeat(200)} (300 more characters)`]);
     expect(details.data).toEqual({ pages: [`${"x".repeat(200)} (300 more characters)`] });
+  });
+});
+
+describe("columnsOf", () => {
+  test("is nine for a chest, a large chest and the inventory", () => {
+    expect(columnsOf(27)).toBe(9);
+    expect(columnsOf(54)).toBe(9);
+    expect(columnsOf(36)).toBe(9);
+  });
+
+  test("is three for a dispenser or a dropper", () => {
+    expect(columnsOf(9)).toBe(3);
+  });
+
+  test("is five for a hopper, which has one row", () => {
+    expect(columnsOf(5)).toBe(5);
+  });
+});
+
+describe("layout", () => {
+  const wool = { ...stone, name: "white_wool", displayName: "White Wool", count: 64 };
+
+  test("gives each stack its row and column, counted from the top left", () => {
+    const slots = [wool, null, stone, null, null, null, null, null, null, null, stone];
+
+    expect(layout(slots, 9)).toEqual([
+      { row: 0, column: 0, name: "white_wool", label: "White Wool", count: 64, details: {} },
+      { row: 0, column: 2, name: "stone", label: "Stone", count: 5, details: {} },
+      { row: 1, column: 1, name: "stone", label: "Stone", count: 5, details: {} },
+    ]);
+  });
+
+  test("keeps two stacks of one kind as two slots", () => {
+    expect(layout([wool, wool], 9).map(({ column, count }) => [column, count])).toEqual([
+      [0, 64],
+      [1, 64],
+    ]);
+  });
+
+  test("wraps after three slots in a dispenser", () => {
+    expect(layout([null, null, null, stone], 3)).toMatchObject([{ row: 1, column: 0 }]);
+  });
+
+  test("is empty when every slot is empty", () => {
+    expect(layout([null, null], 9)).toEqual([]);
   });
 });
 
