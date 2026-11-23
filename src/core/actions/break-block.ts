@@ -18,6 +18,14 @@ export async function equipToolFor(bot: Bot, block: Block): Promise<boolean> {
   return block.harvestTools === undefined || (tool !== null && block.canHarvest(tool.type));
 }
 
+const liquids = new Set(["water", "lava", "bubble_column"]);
+
+// Whether a player can break the block. A swing goes through a liquid, and the game lets
+// nobody break blocks such as bedrock.
+export function breakable(block: { name: string; diggable: boolean }): boolean {
+  return block.diggable && !liquids.has(block.name);
+}
+
 export const breakBlock = defineAction({
   name: "break_block",
   description:
@@ -25,7 +33,7 @@ export const breakBlock = defineAction({
   input: z.object({ x: z.int(), y: z.int(), z: z.int() }),
   async run({ bot, signal }, { x, y, z: zCoordinate }) {
     const block = blockAt(bot, x, y, zCoordinate);
-    if (!block.diggable || block.boundingBox === "empty") {
+    if (!breakable(block)) {
       throw new Error(
         `There is ${block.name} at ${x}, ${y}, ${zCoordinate}, which cannot be broken.`,
       );
