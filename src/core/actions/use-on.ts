@@ -1,7 +1,7 @@
 import { goals } from "mineflayer-pathfinder";
 import { z } from "zod";
 
-import { carried } from "../items.ts";
+import { carried, stackInput } from "../items.ts";
 import { aborted } from "../wait.ts";
 import { defineAction } from "./action.ts";
 import { approach, blockAt, entityWithId } from "./reach.ts";
@@ -17,6 +17,7 @@ export const useOn = defineAction({
         .string()
         .optional()
         .describe("The name of the item to hold. Defaults to what the bot holds now."),
+      ...stackInput,
       coordinates: z.object({ x: z.int(), y: z.int(), z: z.int() }).optional(),
       entityId: z.int().optional().describe("An ID from nearby_entities."),
       holdSeconds: z
@@ -32,8 +33,8 @@ export const useOn = defineAction({
       ({ coordinates, entityId }) => coordinates === undefined || entityId === undefined,
       "Give coordinates or an entityId, not both.",
     ),
-  async run({ bot, signal }, { item, coordinates, entityId, holdSeconds }) {
-    const stack = item === undefined ? undefined : carried(bot, item);
+  async run({ bot, signal }, { item, label, details, coordinates, entityId, holdSeconds }) {
+    const stack = item === undefined ? undefined : carried(bot, item, label, details);
     const hold = async () => {
       if (stack !== undefined) {
         await bot.equip(stack, "hand");

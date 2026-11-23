@@ -1,19 +1,6 @@
-import type { JsonValue } from "type-fest";
+import type { Details, Held, Place } from "./items.ts";
 
-import type { Details, Place } from "./items.ts";
-
-import { listed } from "./items.ts";
-
-// A stack in a slot, as far as moving it matters. Two stacks go into one slot only when
-// their `kind` is the same, which is the item with all the data the server keeps for it.
-export type Held = {
-  name: string;
-  label: string;
-  details: Details;
-  count: number;
-  stackSize: number;
-  kind: string;
-};
+import { matches } from "./items.ts";
 
 // What a call asks to move. Without a label and details it means the stacks that have
 // neither. Without a count it means all there is.
@@ -49,33 +36,6 @@ export type Plan = { moves: Array<Move>; outcomes: Array<Outcome> };
 
 type Slots = ReadonlyArray<Held | null>;
 
-// What moving needs to know about the stack in a slot. Mineflayer's item has all of it.
-type Stored = Parameters<typeof listed>[0] & { type: number; stackSize: number };
-
-export function held(stack: Stored | null): Held | null {
-  return stack === null
-    ? null
-    : {
-        ...listed(stack),
-        stackSize: stack.stackSize,
-        kind: JSON.stringify([stack.type, stack.nbt]),
-      };
-}
-
-// A value as text that is the same whatever order its keys were written in.
-function canonical(value: JsonValue | undefined): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonical).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const parts = Object.entries(value)
-      .toSorted(([one], [other]) => one.localeCompare(other))
-      .map(([key, inner]) => `${JSON.stringify(key)}:${canonical(inner)}`);
-    return `{${parts.join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
-
 // What to tell the agent after a call that did not move everything. `source` and
 // `destination` name the two sides, such as "inventory" and "chest".
 export function shortfall(
@@ -101,13 +61,6 @@ export function shortfall(
         : `${place} no ${called}.`;
     })
     .join(" ");
-}
-
-// Whether a stack is what a name, a label and details stand for in a list of slots.
-export function matches(stack: Held, name: string, label: string, details: Details): boolean {
-  return (
-    stack.name === name && stack.label === label && canonical(stack.details) === canonical(details)
-  );
 }
 
 // Works out the moves that carry out a call, slot by slot, without making them. `labelOf`

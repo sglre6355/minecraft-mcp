@@ -1,7 +1,7 @@
 import { goals } from "mineflayer-pathfinder";
 import { z } from "zod";
 
-import { carried } from "../items.ts";
+import { carried, stackInput } from "../items.ts";
 import { defineAction } from "./action.ts";
 import { falls } from "./collect-block.ts";
 import { blockAt } from "./reach.ts";
@@ -40,13 +40,14 @@ export function landing(name: string, below: ReadonlyArray<string>): number | un
 export const placeBlock = defineAction({
   name: "place_block",
   description:
-    "Place a block from the inventory at a position. The position must be free and must touch a solid block. Walks within reach first. Sand, gravel and the like fall when nothing holds them up. The action waits for the fall and reports where the block came to rest.",
+    "Place a block from the inventory at a position. The position must be free and must touch a solid block. Walks within reach first. Sand, gravel and the like fall when nothing holds them up. The action waits for the fall and reports where the block came to rest. `block` alone means a stack with no name and no details of its own. Give `label` and `details` as the inventory shows them to place another one.",
   input: z.object({
     block: z.string().describe("The name of the item to place, such as cobblestone or torch."),
+    ...stackInput,
     coordinates: z.object({ x: z.int(), y: z.int(), z: z.int() }),
   }),
-  async run({ bot, signal }, { block, coordinates: { x, y, z: zCoordinate } }) {
-    const item = carried(bot, block);
+  async run({ bot, signal }, { block, label, details, coordinates: { x, y, z: zCoordinate } }) {
+    const item = carried(bot, block, label, details);
     const target = blockAt(bot, x, y, zCoordinate);
     if (target.boundingBox !== "empty") {
       throw new Error(`There is ${target.name} at ${x}, ${y}, ${zCoordinate} already.`);

@@ -2,11 +2,20 @@ import type { Bot } from "mineflayer";
 
 import { z } from "zod";
 
-import { columnsOf, itemNamed, layout, listedNote, slotsNote } from "../items.ts";
 import type { Pile } from "../arrange.ts";
 
 import { arrange as planned, misfit } from "../arrange.ts";
-import { held, matches, plan, shortfall } from "../moves.ts";
+import {
+  columnsOf,
+  held,
+  itemNamed,
+  layout,
+  listedNote,
+  matches,
+  slotsNote,
+  stackInput,
+} from "../items.ts";
+import { plan, shortfall } from "../moves.ts";
 import { within } from "../wait.ts";
 import { defineAction } from "./action.ts";
 import { approach, blockAt, nearestBlock } from "./reach.ts";
@@ -102,23 +111,11 @@ export const viewContainer = defineAction({
 
 const place = z.object({ row: z.int().min(0), column: z.int().min(0) });
 
-const details = z.object({
-  lore: z.array(z.string()).optional(),
-  enchantments: z.array(z.object({ name: z.string(), level: z.number() })).optional(),
-  data: z.record(z.string(), z.json()).optional(),
-});
-
 const items = z
   .array(
     z.object({
       name: z.string().describe("The item, as `name` in a list of slots."),
-      label: z
-        .string()
-        .optional()
-        .describe("The `label` of the stack. Leave it out for a stack that was given no name."),
-      details: details
-        .optional()
-        .describe("The `details` of the stack. Leave them out for a stack that has none."),
+      ...stackInput,
       count: z.int().min(1).optional().describe("How many. Defaults to all that match."),
       sources: z
         .array(place)
@@ -256,8 +253,7 @@ const arranged = z.array(
     row: z.int().min(0),
     column: z.int().min(0),
     name: z.string(),
-    label: z.string().optional(),
-    details: details.optional(),
+    ...stackInput,
     count: z.int().min(1),
   }),
 );

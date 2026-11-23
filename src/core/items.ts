@@ -140,6 +140,60 @@ export function listed(stack: Carried): Listed {
   };
 }
 
+// A stack as far as telling stacks apart matters. Two stacks go into one slot only when
+// their `kind` is the same, which is the item with all the data the server keeps for it.
+export type Held = Listed & { stackSize: number; kind: string };
+
+// What telling stacks apart needs to know about one. Mineflayer's item has all of it.
+type Stored = Carried & { type: number; stackSize: number };
+
+export function held(stack: Stored | null): Held | null {
+  return stack === null
+    ? null
+    : {
+        ...listed(stack),
+        stackSize: stack.stackSize,
+        kind: JSON.stringify([stack.type, stack.nbt]),
+      };
+}
+
+// A value as text that is the same whatever order its keys were written in.
+function canonical(value: JsonValue | undefined): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const parts = Object.entries(value)
+      .toSorted(([one], [other]) => one.localeCompare(other))
+      .map(([key, inner]) => `${JSON.stringify(key)}:${canonical(inner)}`);
+    return `{${parts.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+// Whether a stack is what a name, a label and details stand for in a list of slots.
+export function matches(stack: Held, name: string, label: string, details: Details): boolean {
+  return (
+    stack.name === name && stack.label === label && canonical(stack.details) === canonical(details)
+  );
+}
+
+// How a call names one stack among those of an item.
+export const stackInput = {
+  label: z
+    .string()
+    .optional()
+    .describe("The `label` of the stack. Leave it out for a stack that was given no name."),
+  details: z
+    .object({
+      lore: z.array(z.string()).optional(),
+      enchantments: z.array(z.object({ name: z.string(), level: z.number() })).optional(),
+      data: z.record(z.string(), z.json()).optional(),
+    })
+    .optional()
+    .describe("The `details` of the stack. Leave them out for a stack that has none."),
+};
+
 // A slot of a container or of the inventory, counted from 0 at the top left.
 export type Place = { row: number; column: number };
 
@@ -227,23 +281,35 @@ export function blockNamed(bot: Bot, name: string) {
   return block;
 }
 
-// How many of the item the bot carries.
-export function countOf(bot: Bot, name: string): number {
-  let count = 0;
-  for (const stack of bot.inventory.items()) {
-    if (stack.name === name) {
-      count += stack.count;
-    }
-  }
-  return count;
+// The stacks the bot carries that a name, a label and details stand for. Without a label
+// and details those are the stacks that have neither.
+export function carriedAs(bot: Bot, name: string, label?: string, details?: Details) {
+  const plain = itemNamed(bot, name).displayName;
+  return bot.inventory.items().filter((stack) => {
+    const known = held(stack);
+    return known !== null && matches(known, name, label ?? plain, details ?? {});
+  });
 }
 
-// One stack of the item from the bot's inventory.
-export function carried(bot: Bot, name: string) {
-  itemNamed(bot, name);
-  const stack = bot.inventory.items().find((candidate) => candidate.name === name);
+// How many of the stack the bot carries.
+export function countOf(bot: Bot, name: string, label?: string, details?: Details): number {
+  return carriedAs(bot, name, label, details).reduce((sum, stack) => sum + stack.count, 0);
+}
+
+// Why the bot has no stack that a name, a label and details stand for.
+export function lacking(bot: Bot, name: string, label?: string, details?: Details): string {
+  const marked = label !== undefined || details !== undefined;
+  const called = marked ? `${name} labeled "${label ?? itemNamed(bot, name).displayName}"` : name;
+  return bot.inventory.items().some((stack) => stack.name === name)
+    ? `The bot carries no ${called}. It carries ${name} with another label or other details. Give the \`label\` and \`details\` that the inventory shows for it.`
+    : `The bot carries no ${called}.`;
+}
+
+// One such stack from the bot's inventory.
+export function carried(bot: Bot, name: string, label?: string, details?: Details) {
+  const [stack] = carriedAs(bot, name, label, details);
   if (stack === undefined) {
-    throw new Error(`The bot carries no ${name}.`);
+    throw new Error(lacking(bot, name, label, details));
   }
   return stack;
 }

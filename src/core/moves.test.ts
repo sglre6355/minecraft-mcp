@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Held, Outcome, Wanted } from "./moves.ts";
+import type { Held } from "./items.ts";
+import type { Outcome, Wanted } from "./moves.ts";
 
-import { held, plan, shortfall } from "./moves.ts";
+import { held } from "./items.ts";
+import { plan, shortfall } from "./moves.ts";
 
 const wool = (count: number): Held => ({
   name: "white_wool",
