@@ -22,7 +22,7 @@ export function isContainer(name: string): boolean {
 }
 
 const kinds =
-  "A container is a chest, trapped chest, barrel, dispenser, dropper, hopper or shulker box. Without a position, the bot takes the nearest chest or barrel.";
+  "A container is a chest, trapped chest, barrel, dispenser, dropper, hopper or shulker box. Without coordinates, the bot takes the nearest chest or barrel.";
 
 // How far the bot looks for a chest, in blocks.
 const chestRange = 16;
@@ -34,16 +34,7 @@ const openReach = 4.5;
 // lid does not open.
 const openMs = 3000;
 
-const position = {
-  x: z.int().optional(),
-  y: z.int().optional(),
-  z: z.int().optional(),
-};
-const whole = (input: { x?: number; y?: number; z?: number }) =>
-  (input.x === undefined) === (input.y === undefined) &&
-  (input.y === undefined) === (input.z === undefined);
-const wholeMessage =
-  "Give all of x, y and z to name a container, or none for the nearest chest or barrel.";
+const coordinates = z.object({ x: z.int(), y: z.int(), z: z.int() }).optional();
 
 type Container = Awaited<ReturnType<Bot["openContainer"]>>;
 
@@ -52,13 +43,11 @@ type Container = Awaited<ReturnType<Bot["openContainer"]>>;
 async function withContainer<Result>(
   bot: Bot,
   signal: AbortSignal,
-  at: { x?: number; y?: number; z?: number },
+  at: { x: number; y: number; z: number } | undefined,
   work: (container: Container, name: string) => Promise<Result>,
-): Promise<Result & { container: { x: number; y: number; z: number } }> {
+): Promise<Result & { coordinates: { x: number; y: number; z: number } }> {
   const block =
-    at.x !== undefined && at.y !== undefined && at.z !== undefined
-      ? blockAt(bot, at.x, at.y, at.z)
-      : nearestBlock(bot, storage, chestRange);
+    at === undefined ? nearestBlock(bot, storage, chestRange) : blockAt(bot, at.x, at.y, at.z);
   if (block === null) {
     throw new Error(`No chest or barrel is within ${chestRange} blocks.`);
   }
@@ -78,7 +67,7 @@ async function withContainer<Result>(
   try {
     signal.throwIfAborted();
     const result = await work(container, block.name);
-    return { ...result, container: { x, y, z: zCoordinate } };
+    return { ...result, coordinates: { x, y, z: zCoordinate } };
   } finally {
     await container.close();
   }
@@ -87,9 +76,9 @@ async function withContainer<Result>(
 export const viewContainer = defineAction({
   name: "view_container",
   description: `Walk to a container, open it and list what is inside. ${kinds} ${listedNote}`,
-  input: z.object(position).refine(whole, wholeMessage),
+  input: z.object({ coordinates }),
   run: ({ bot, signal }, input) =>
-    withContainer(bot, signal, input, (container) =>
+    withContainer(bot, signal, input.coordinates, (container) =>
       Promise.resolve({ items: list(container.containerItems().map(listed)) }),
     ),
 });
@@ -99,13 +88,11 @@ const count = z.int().min(1).optional();
 export const putInContainer = defineAction({
   name: "put_in_container",
   description: `Walk to a container and put items from the inventory into it. ${kinds}`,
-  input: z
-    .object({
-      item: z.string().describe("The name of the item."),
-      count: count.describe("How many. Defaults to all the bot carries."),
-      ...position,
-    })
-    .refine(whole, wholeMessage),
+  input: z.object({
+    item: z.string().describe("The name of the item."),
+    count: count.describe("How many. Defaults to all the bot carries."),
+    coordinates,
+  }),
   run({ bot, signal }, input) {
     const { id } = itemNamed(bot, input.item);
     const have = countOf(bot, input.item);
@@ -113,7 +100,7 @@ export const putInContainer = defineAction({
       throw new Error(`The bot carries ${have} ${input.item}.`);
     }
     const put = input.count ?? have;
-    return withContainer(bot, signal, input, async (container) => {
+    return withContainer(bot, signal, input.coordinates, async (container) => {
       await container.deposit(id, null, put);
       return { put, item: input.item };
     });
@@ -123,16 +110,14 @@ export const putInContainer = defineAction({
 export const takeFromContainer = defineAction({
   name: "take_from_container",
   description: `Walk to a container and take items out of it. ${kinds}`,
-  input: z
-    .object({
-      item: z.string().describe("The name of the item."),
-      count: count.describe("How many. Defaults to all the container holds."),
-      ...position,
-    })
-    .refine(whole, wholeMessage),
+  input: z.object({
+    item: z.string().describe("The name of the item."),
+    count: count.describe("How many. Defaults to all the container holds."),
+    coordinates,
+  }),
   run({ bot, signal }, input) {
     const { id } = itemNamed(bot, input.item);
-    return withContainer(bot, signal, input, async (container, name) => {
+    return withContainer(bot, signal, input.coordinates, async (container, name) => {
       const inside =
         countByName(container.containerItems()).find((stack) => stack.name === input.item)?.count ??
         0;

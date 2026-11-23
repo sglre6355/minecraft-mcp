@@ -33,7 +33,7 @@ export const nearbyEntities = defineQuery({
           username: entity.username ?? null,
           // The stack that a dropped item is.
           item: stack === null ? null : listed(stack),
-          position: {
+          coordinates: {
             x: round(entity.position.x),
             y: round(entity.position.y),
             z: round(entity.position.z),

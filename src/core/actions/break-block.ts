@@ -30,8 +30,8 @@ export const breakBlock = defineAction({
   name: "break_block",
   description:
     "Break the block at a position, with the best tool the bot carries. Walks within reach first. Use collect_block to gather blocks of a kind.",
-  input: z.object({ x: z.int(), y: z.int(), z: z.int() }),
-  async run({ bot, signal }, { x, y, z: zCoordinate }) {
+  input: z.object({ coordinates: z.object({ x: z.int(), y: z.int(), z: z.int() }) }),
+  async run({ bot, signal }, { coordinates: { x, y, z: zCoordinate } }) {
     const block = blockAt(bot, x, y, zCoordinate);
     if (!breakable(block)) {
       throw new Error(

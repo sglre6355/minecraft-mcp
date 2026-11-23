@@ -133,7 +133,7 @@ describe("describe", () => {
     const view = describeView(eye, [...floor, seen("chest", 2, 0, 1, 2)], 0, limits);
 
     expect(view.near.kinds).toEqual([{ name: "stone", count: 5 }]);
-    expect(view.near.rare).toEqual([{ name: "chest", position: { x: 2, y: 0, z: 1 } }]);
+    expect(view.near.rare).toEqual([{ name: "chest", coordinates: { x: 2, y: 0, z: 1 } }]);
   });
 
   test("counts a kind as rare by how much of it is in the whole view", () => {

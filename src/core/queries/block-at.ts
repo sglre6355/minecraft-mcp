@@ -10,7 +10,7 @@ import { defineQuery } from "./query.ts";
 export type BlockState = { [name: string]: string | number | boolean };
 
 export type BlockReport = {
-  position: Position;
+  coordinates: Position;
   name: string;
   state: BlockState;
 };
@@ -34,12 +34,10 @@ export const blockAt = defineQuery({
   description:
     "Report the kind of block at a position and its state, such as whether a door or trapdoor is open, which way stairs face or how far a crop has grown. Answers only for a block the bot can see, which is one that a straight line from its eyes reaches within 96 blocks.",
   input: z.object({
-    x: z.number(),
-    y: z.number(),
-    z: z.number(),
+    coordinates: z.object({ x: z.number(), y: z.number(), z: z.number() }),
   }),
-  run({ bot }, input): Promise<BlockReport> {
-    const block = loadedBlockAt(bot, Math.floor(input.x), Math.floor(input.y), Math.floor(input.z));
+  run({ bot }, { coordinates: at }): Promise<BlockReport> {
+    const block = loadedBlockAt(bot, Math.floor(at.x), Math.floor(at.y), Math.floor(at.z));
     const { x, y, z: zCoordinate } = block.position;
     if (!sees(sightOf(bot), x, y, zCoordinate)) {
       throw new Error(
@@ -47,7 +45,7 @@ export const blockAt = defineQuery({
       );
     }
     return Promise.resolve({
-      position: { x, y, z: zCoordinate },
+      coordinates: { x, y, z: zCoordinate },
       name: block.name,
       state: blockState(block.getProperties(), bot.registry.blocksByName[block.name]?.states ?? []),
     });

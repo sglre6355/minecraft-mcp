@@ -10,16 +10,14 @@ import { walk } from "./walk.ts";
 export const useOn = defineAction({
   name: "use_on",
   description:
-    "Use an item, as a right click does. Give a block position to use it on that block (open a door, fill a bucket, till soil), an entityId to use it on a mob or player (shear a sheep), or neither to use it in the air.",
+    "Use an item, as a right click does. Give the coordinates of a block to use it on that block (open a door, fill a bucket, till soil), an entityId to use it on a mob or player (shear a sheep), or neither to use it in the air.",
   input: z
     .object({
       item: z
         .string()
         .optional()
         .describe("The name of the item to hold. Defaults to what the bot holds now."),
-      x: z.int().optional(),
-      y: z.int().optional(),
-      z: z.int().optional(),
+      coordinates: z.object({ x: z.int(), y: z.int(), z: z.int() }).optional(),
       entityId: z.int().optional().describe("An ID from nearby_entities."),
       holdSeconds: z
         .number()
@@ -31,16 +29,10 @@ export const useOn = defineAction({
         ),
     })
     .refine(
-      ({ x, y, z: zCoordinate }) =>
-        (x === undefined) === (y === undefined) &&
-        (y === undefined) === (zCoordinate === undefined),
-      "Give all of x, y and z, or none of them.",
-    )
-    .refine(
-      ({ x, entityId }) => x === undefined || entityId === undefined,
-      "Give a block position or an entityId, not both.",
+      ({ coordinates, entityId }) => coordinates === undefined || entityId === undefined,
+      "Give coordinates or an entityId, not both.",
     ),
-  async run({ bot, signal }, { item, x, y, z: zCoordinate, entityId, holdSeconds }) {
+  async run({ bot, signal }, { item, coordinates, entityId, holdSeconds }) {
     const stack = item === undefined ? undefined : carried(bot, item);
     const hold = async () => {
       if (stack !== undefined) {
@@ -59,8 +51,8 @@ export const useOn = defineAction({
       return { used, on: entity.name ?? null };
     }
 
-    if (x !== undefined && y !== undefined && zCoordinate !== undefined) {
-      const block = blockAt(bot, x, y, zCoordinate);
+    if (coordinates !== undefined) {
+      const block = blockAt(bot, coordinates.x, coordinates.y, coordinates.z);
       await approach(bot, block.position, signal);
       const used = await hold();
       // From above, a line to the middle of a block can clip the edge of the block beside it.

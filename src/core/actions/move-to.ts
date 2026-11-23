@@ -123,9 +123,7 @@ export function failure(
 }
 
 export const destination = z.object({
-  x: z.number(),
-  y: z.number(),
-  z: z.number(),
+  coordinates: z.object({ x: z.number(), y: z.number(), z: z.number() }),
   range: z.number().min(0).default(1).describe("Stop within this many blocks of the position."),
   canDig: z.boolean().default(false).describe("Break blocks that are in the way."),
   canPlace: z
@@ -145,8 +143,9 @@ export const moveTo = defineAction({
     distance: z.number().describe("Blocks left to the block of the position."),
   }),
   async run({ bot, signal, progress }, input) {
-    const distance = () => blocksLeft(bot.entity.position, input);
-    const goal = new goals.GoalNear(input.x, input.y, input.z, input.range);
+    const to = input.coordinates;
+    const distance = () => blocksLeft(bot.entity.position, to);
+    const goal = new goals.GoalNear(to.x, to.y, to.z, input.range);
 
     const reporting = setInterval(() => {
       progress({ distance: distance() });
@@ -165,14 +164,14 @@ export const moveTo = defineAction({
 
     const left = distance();
     if (outcome === "no answer") {
-      throw new Error(noAnswer(left, spotAt(bot, input), waysLeftOff(input)));
+      throw new Error(noAnswer(left, spotAt(bot, to), waysLeftOff(input)));
     }
     if (outcome === "no path") {
       const route = await findRoute(bot, goal, input);
       signal.throwIfAborted();
-      throw new Error(failure(route, left, input, spotAt(bot, input), waysLeftOff(input)));
+      throw new Error(failure(route, left, to, spotAt(bot, to), waysLeftOff(input)));
     }
     const { x, y, z: zCoordinate } = bot.entity.position;
-    return { position: { x, y, z: zCoordinate }, distance: left };
+    return { coordinates: { x, y, z: zCoordinate }, distance: left };
   },
 });

@@ -17,7 +17,7 @@ export type Kind = {
 // One block, named with where it is.
 export type Sighting = {
   name: string;
-  position: Position;
+  coordinates: Position;
 };
 
 // What lies within a few steps of the eye.
@@ -205,7 +205,9 @@ export function describe(
   const isRare = (block: Seen) => (inView.get(block.name) ?? 0) <= rareAtMost;
   const sightings = (blocks: Array<Seen>): Array<Sighting> =>
     blocks.flatMap((block) =>
-      isRare(block) ? [{ name: block.name, position: { x: block.x, y: block.y, z: block.z } }] : [],
+      isRare(block)
+        ? [{ name: block.name, coordinates: { x: block.x, y: block.y, z: block.z } }]
+        : [],
     );
   const common = (blocks: Array<Seen>) => count(blocks.filter((block) => !isRare(block)));
 

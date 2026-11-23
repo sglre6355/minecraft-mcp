@@ -43,11 +43,9 @@ export const placeBlock = defineAction({
     "Place a block from the inventory at a position. The position must be free and must touch a solid block. Walks within reach first. Sand, gravel and the like fall when nothing holds them up. The action waits for the fall and reports where the block came to rest.",
   input: z.object({
     block: z.string().describe("The name of the item to place, such as cobblestone or torch."),
-    x: z.int(),
-    y: z.int(),
-    z: z.int(),
+    coordinates: z.object({ x: z.int(), y: z.int(), z: z.int() }),
   }),
-  async run({ bot, signal }, { block, x, y, z: zCoordinate }) {
+  async run({ bot, signal }, { block, coordinates: { x, y, z: zCoordinate } }) {
     const item = carried(bot, block);
     const target = blockAt(bot, x, y, zCoordinate);
     if (target.boundingBox !== "empty") {
@@ -74,12 +72,12 @@ export const placeBlock = defineAction({
     await bot.placeBlock(against, target.position.minus(against.position));
     const placed = blockAt(bot, x, y, zCoordinate).name;
     if (!falls(placed)) {
-      return { placed, position: { x, y, z: zCoordinate } };
+      return { placed, coordinates: { x, y, z: zCoordinate } };
     }
 
     await bot.waitForTicks(leaveTicks);
     if (bot.blockAt(target.position)?.name === placed) {
-      return { placed, position: { x, y, z: zCoordinate } };
+      return { placed, coordinates: { x, y, z: zCoordinate } };
     }
     const inFlight = () =>
       Object.values(bot.entities).some(
@@ -107,6 +105,6 @@ export const placeBlock = defineAction({
         `The ${placed} fell from ${x}, ${y}, ${zCoordinate} and did not come to rest. It fell out of the world or broke on what it hit.`,
       );
     }
-    return { placed, position: { x, y: y - fell, z: zCoordinate } };
+    return { placed, coordinates: { x, y: y - fell, z: zCoordinate } };
   },
 });
