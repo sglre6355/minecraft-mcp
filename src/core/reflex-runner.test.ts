@@ -2,6 +2,7 @@ import type { JsonObject, JsonValue } from "type-fest";
 
 import { describe, expect, test } from "bun:test";
 
+import type { ActionReport, ActionRequest } from "./action-runner.ts";
 import type { Emit } from "./events/event.ts";
 import type { BoundReflex } from "./reflex-runner.ts";
 
@@ -16,7 +17,7 @@ function create(reflexes: Array<BoundReflex<unknown>>) {
     events.push({ kind: kind.kind, payload });
   };
   const reflexRunner = new ReflexRunner({ body, emit, stopGraceMs: 30 });
-  const actionRunner = new ActionRunner({ body, emit, waitMs: 10, stopGraceMs: 30 });
+  const actionRunner = new ActionRunner({ body, stopGraceMs: 30 });
   const check = () => reflexRunner.check(reflexes);
   return { body, events, reflexRunner, actionRunner, check };
 }
@@ -60,6 +61,16 @@ function holding(suppressReflexes: Array<string> = []) {
 
 function kinds(events: Array<{ kind: string }>) {
   return events.map((event) => event.kind);
+}
+
+// Puts an action in the queue and waits a tick, so that it runs if the body lets it.
+async function begin(runner: ActionRunner, action: ActionRequest): Promise<ActionReport> {
+  const result = runner.enqueue(action);
+  if (!result.accepted) {
+    throw new Error("expected the action to be queued");
+  }
+  await Bun.sleep(0);
+  return result.report;
 }
 
 function payloads(events: Array<{ kind: string; payload: JsonObject }>, kind: string) {
@@ -112,26 +123,28 @@ describe("ReflexRunner", () => {
     const { reflex } = controllable("drowning");
     reflex.decide = () => Promise.resolve(undefined);
     const { body, events, actionRunner, check } = create([reflex]);
-    await actionRunner.start(holding());
+    await begin(actionRunner, holding());
 
     await check();
 
     expect(body.holder?.kind).toBe("action");
-    expect(kinds(events)).toEqual(["action.started"]);
+    expect(events).toEqual([]);
   });
 
   test("stops a running action to act, and says which one", async () => {
     const { reflex, act } = controllable("drowning");
     const { events, actionRunner, check } = create([reflex]);
-    const started = await actionRunner.start(holding());
-    const actionId = started.started ? started.report.actionId : "";
+    const { actionId } = await begin(actionRunner, holding());
 
     const checking = check();
     await Bun.sleep(0);
 
-    expect(payloads(events, "action.interrupted")).toEqual([
-      { actionId, name: "hold", by: "reflex", reflex: "drowning", stopped: true },
-    ]);
+    expect(await actionRunner.ended(actionId)).toMatchObject({
+      status: "interrupted",
+      by: "reflex",
+      reflex: "drowning",
+      stopped: true,
+    });
     expect(payloads(events, "reflex.activated")).toEqual([
       { reflex: "drowning", decision: "surface", interruptedActionId: actionId },
     ]);
@@ -143,15 +156,15 @@ describe("ReflexRunner", () => {
   test("stays out while an action suppresses the reflex, and acts once that action ends", async () => {
     const { reflex, act } = controllable("drowning");
     const { body, events, actionRunner, check } = create([reflex]);
-    const started = await actionRunner.start(holding(["drowning"]));
-    const actionId = started.started ? started.report.actionId : "";
+    const { actionId } = await begin(actionRunner, holding(["drowning"]));
 
     await check();
 
     expect(body.holder).toEqual({ kind: "action", id: actionId });
-    expect(kinds(events)).toEqual(["action.started"]);
+    expect(events).toEqual([]);
 
-    await actionRunner.cancel(actionId);
+    actionRunner.cancel(actionId);
+    await actionRunner.ended(actionId);
     const checking = check();
     await Bun.sleep(0);
 
@@ -167,10 +180,10 @@ describe("ReflexRunner", () => {
     const checking = check();
     await Bun.sleep(0);
 
-    const started = await actionRunner.start(holding(["drowning"]));
+    const started = await begin(actionRunner, holding(["drowning"]));
     await checking;
 
-    expect(started.started).toBe(true);
+    expect(actionRunner.report(started.actionId)).toMatchObject({ status: "running" });
     expect(signals[0]?.aborted).toBe(true);
     expect(body.holder?.kind).toBe("action");
     expect(payloads(events, "reflex.ended")).toEqual([
@@ -178,18 +191,22 @@ describe("ReflexRunner", () => {
     ]);
   });
 
-  test("refuses an action that does not suppress the running reflex", async () => {
+  test("holds back an action that does not suppress the running reflex until the reflex ends", async () => {
     const { reflex, act } = controllable("drowning");
-    const { actionRunner, check } = create([reflex]);
+    const { body, actionRunner, check } = create([reflex]);
     const checking = check();
     await Bun.sleep(0);
 
-    const started = await actionRunner.start(holding());
+    const queued = await begin(actionRunner, holding());
 
-    expect(started).toEqual({ started: false, heldBy: { kind: "reflex", name: "drowning" } });
+    expect(actionRunner.report(queued.actionId)).toMatchObject({ status: "queued", ahead: 0 });
+    expect(body.holder).toEqual({ kind: "reflex", name: "drowning" });
 
     act.resolve();
     await checking;
+    await Bun.sleep(0);
+
+    expect(actionRunner.report(queued.actionId)).toMatchObject({ status: "running" });
   });
 
   test("takes the body from a reflex that ignores the order to stop", async () => {
@@ -198,10 +215,10 @@ describe("ReflexRunner", () => {
     const checking = check();
     await Bun.sleep(0);
 
-    const started = await actionRunner.start(holding(["drowning"]));
+    const started = await begin(actionRunner, holding(["drowning"]));
     await checking;
 
-    expect(started.started).toBe(true);
+    expect(actionRunner.report(started.actionId)).toMatchObject({ status: "running" });
     expect(body.holder?.kind).toBe("action");
     expect(payloads(events, "reflex.ended")).toEqual([
       { reflex: "drowning", outcome: "overruled", message: null, stopped: false },
@@ -286,7 +303,7 @@ describe("ReflexRunner", () => {
     const decision = Promise.withResolvers<string | undefined>();
     reflex.decide = () => decision.promise;
     const { body, events, actionRunner, check } = create([reflex]);
-    await actionRunner.start(holding());
+    await begin(actionRunner, holding());
     const checking = check();
 
     reflex.observe = () => undefined;
@@ -294,7 +311,7 @@ describe("ReflexRunner", () => {
     await checking;
 
     expect(body.holder?.kind).toBe("action");
-    expect(kinds(events)).toEqual(["action.started"]);
+    expect(events).toEqual([]);
   });
 
   test("reports a reflex whose act fails, and gives the body back", async () => {

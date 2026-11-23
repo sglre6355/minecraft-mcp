@@ -33,10 +33,6 @@ capacity = 256
 oxygenAtMost = 10
 foodAtMost = 6
 
-[actions]
-# A call that starts an action answers after this many milliseconds, even if the action still runs.
-waitMs = 10000
-
 # A reflex runs unless it is switched off by name.
 # [reflexes.drowning]
 # enabled = false

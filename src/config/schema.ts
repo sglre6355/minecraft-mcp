@@ -26,11 +26,6 @@ const events = z.strictObject({
   foodAtMost: z.int().min(0).max(20).default(6),
 });
 
-const actions = z.strictObject({
-  // A call that starts an action answers after this long, even if the action still runs.
-  waitMs: z.int().min(0).default(10_000),
-});
-
 // Keyed by the name of a reflex. A reflex runs unless it is switched off here.
 const reflexes = z.record(
   z.string().min(1),
@@ -42,7 +37,6 @@ export const configSchema = z.strictObject({
   server: server.prefault({}),
   chat: chat.prefault({}),
   events: events.prefault({}),
-  actions: actions.prefault({}),
   reflexes: reflexes.default({}),
   // The ways events reach the agent.
   delivery: z.array(z.enum(["poll-tool", "mcp-events"])).default(["poll-tool", "mcp-events"]),

@@ -26,8 +26,8 @@ const drowning: Reflex<unknown, string> = {
 // The bot is absent, so a call that passes every check ends in `not_connected`.
 function build(plugin: Plugin) {
   const registry = buildRegistry([plugin]);
-  const runner = new ActionRunner({ body: new Body(), emit: silent, waitMs: 10, stopGraceMs: 10 });
-  const config = configSchema.parse({ actions: { waitMs: 20 } });
+  const runner = new ActionRunner({ body: new Body(), stopGraceMs: 10 });
+  const config = configSchema.parse({});
   return buildTools({
     registry,
     runner,
@@ -35,6 +35,7 @@ function build(plugin: Plugin) {
     config,
     presence: unreachable(),
     bot: () => undefined,
+    connectWaitMs: 20,
   });
 }
 
@@ -199,15 +200,13 @@ describe("buildTools", () => {
       ["dig", "action"],
       ["connect", "control"],
       ["disconnect", "control"],
-      ["action_status", "query"],
-      ["cancel_action", "control"],
     ]);
   });
 
-  test("rejects a plugin tool that takes the name of a tool that manages actions", () => {
-    const plugin = definePlugin({ name: "a", actions: [action("cancel_action", z.object({}))] });
+  test("rejects a plugin tool that takes the name of a tool that manages the connection", () => {
+    const plugin = definePlugin({ name: "a", actions: [action("connect", z.object({}))] });
 
-    expect(() => build(plugin)).toThrow('The tool name "cancel_action" is reserved');
+    expect(() => build(plugin)).toThrow('The tool name "connect" is reserved');
   });
 
   test("rejects an action whose input uses the key for suppressing reflexes", () => {
@@ -294,33 +293,6 @@ describe("an action tool", () => {
 
   test("rejects input that is not an object", async () => {
     const result = await call(tools, "dig", "deep");
-
-    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
-  });
-});
-
-describe("the tools that manage actions", () => {
-  const tools = build(definePlugin({ name: "a" }));
-
-  test("say so when no action has run", async () => {
-    const result = await call(tools, "action_status", {});
-
-    expect(result).toMatchObject({
-      ok: false,
-      error: { code: "unknown_action", message: "No action has run yet." },
-    });
-  });
-
-  test("say so when asked about an ID that was never issued", async () => {
-    const status = await call(tools, "action_status", { actionId: "nope" });
-    const cancel = await call(tools, "cancel_action", { actionId: "nope" });
-
-    expect(status).toMatchObject({ ok: false, error: { code: "unknown_action" } });
-    expect(cancel).toMatchObject({ ok: false, error: { code: "unknown_action" } });
-  });
-
-  test("reject a cancel without an ID", async () => {
-    const result = await call(tools, "cancel_action", {});
 
     expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
   });

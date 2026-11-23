@@ -5,7 +5,9 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 
 import type { EventKindDescriptor, ToolDescriptor } from "../protocol/descriptors.ts";
+import type { CallResult } from "../protocol/messages.ts";
 
+import { BlockingCalls } from "./actions.ts";
 import { EventLog } from "./delivery/event-log.ts";
 import { pollTool } from "./delivery/poll-tool/poll-tool.ts";
 import { createServer } from "./server.ts";
@@ -47,13 +49,16 @@ const moveTo: ToolDescriptor = {
   progressSchema: z.toJSONSchema(z.object({ distance: z.number() })),
 };
 
+// A core that answers every call with nothing.
+const idle = (): Promise<CallResult> => Promise.resolve({ ok: true, output: null });
+
 // The real SDK serves the requests in this process. Nothing listens on a port.
 function serve(tools: Array<ToolDescriptor> = []) {
   const log = new EventLog(8);
   const deliveries = [pollTool(() => eventKinds)];
   const handler = createMcpHandler((context) =>
     createServer(
-      { core: { tools, call: () => Promise.resolve({ ok: true, output: null }) }, log, deliveries },
+      { core: { tools, call: idle, action: idle }, log, deliveries, calls: new BlockingCalls() },
       context.era,
     ),
   );
@@ -126,9 +131,10 @@ describe("createServer", () => {
     expect(() =>
       createServer(
         {
-          core: { tools: [clash], call: () => Promise.resolve({ ok: true, output: null }) },
+          core: { tools: [clash], call: idle, action: idle },
           log: new EventLog(8),
           deliveries: [pollTool(() => eventKinds)],
+          calls: new BlockingCalls(),
         },
         "legacy",
       ),

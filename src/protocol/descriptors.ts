@@ -4,7 +4,7 @@ export type JsonSchema = z.core.JSONSchema.JSONSchema;
 
 export interface ToolDescriptor {
   // A command acts on the world without the body.
-  // A control tool manages the connection or the running action.
+  // A control tool manages the connection.
   kind: "action" | "query" | "command" | "control";
   name: string;
   description: string;

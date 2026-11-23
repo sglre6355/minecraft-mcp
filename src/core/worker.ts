@@ -1,7 +1,13 @@
 import type { Bot } from "mineflayer";
 
 import type { Config } from "../config/schema.ts";
-import type { CallResult, CoreToGateway, GatewayToCore, Target } from "../protocol/messages.ts";
+import type {
+  ActionOperation,
+  CallResult,
+  CoreToGateway,
+  GatewayToCore,
+  Target,
+} from "../protocol/messages.ts";
 import type { DialHooks } from "./connection.ts";
 import type { Emit, EventSourceDefinition } from "./events/event.ts";
 import type { Registry } from "./plugins.ts";
@@ -10,7 +16,7 @@ import type { Reflex } from "./reflexes/reflex.ts";
 import type { Tool } from "./tools.ts";
 
 import { log } from "../log.ts";
-import { ActionRunner, actionEventKinds } from "./action-runner.ts";
+import { ActionRunner } from "./action-runner.ts";
 import { Body } from "./body.ts";
 import { builtin } from "./builtin.ts";
 import { connectionEventKinds, dial, disconnected } from "./connection.ts";
@@ -104,7 +110,11 @@ const stopGraceMs = 2000;
 // How often the reflexes look at the bot.
 const reflexCheckMs = 100;
 
+// `connect` responds after this much time, even if the bot is still joining.
+const connectWaitMs = 10_000;
+
 let tools: Map<string, Tool> | undefined;
+let actions: ActionRunner | undefined;
 
 // The waits between tries to join again, as for the core's restarts.
 const reconnectBaseMs = 1000;
@@ -115,7 +125,8 @@ async function init(config: Config, rejoin: Target | null): Promise<void> {
   const loaded = buildRegistry([builtin, ...(await loadPlugins(config.plugins))]);
   const registry = { ...loaded, reflexes: enabledReflexes(loaded.reflexes, config.reflexes) };
   const body = new Body();
-  const runner = new ActionRunner({ body, emit, waitMs: config.actions.waitMs, stopGraceMs });
+  const runner = new ActionRunner({ body, stopGraceMs });
+  actions = runner;
   const reflexRunner = new ReflexRunner({ body, emit, stopGraceMs });
 
   // The bot of the connection that is up, with what runs on it.
@@ -171,14 +182,10 @@ async function init(config: Config, rejoin: Target | null): Promise<void> {
     presence,
     // A bot that is leaving is of no use to a tool.
     bot: () => (presence.state === "connected" ? present?.bot : undefined),
+    connectWaitMs,
   });
 
-  const eventKinds = [
-    ...connectionEventKinds,
-    ...actionEventKinds,
-    ...reflexEventKinds,
-    ...registry.eventKinds,
-  ];
+  const eventKinds = [...connectionEventKinds, ...reflexEventKinds, ...registry.eventKinds];
 
   post({
     type: "ready",
@@ -203,6 +210,22 @@ async function call(name: string, input: unknown): Promise<CallResult> {
   }
 }
 
+async function operate(op: ActionOperation, actionId: string): Promise<CallResult> {
+  const report =
+    op === "get"
+      ? actions?.report(actionId)
+      : op === "wait"
+        ? await actions?.ended(actionId)
+        : actions?.cancel(actionId);
+  if (report === undefined) {
+    return {
+      ok: false,
+      error: { code: "unknown_action", message: `No action has the ID "${actionId}".` },
+    };
+  }
+  return { ok: true, output: report };
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -215,20 +238,25 @@ async function handle(message: GatewayToCore): Promise<void> {
     case "ping":
       post({ type: "pong" });
       break;
-    case "call": {
-      const result = await call(message.tool, message.input);
-      try {
-        post({ type: "result", id: message.id, result });
-      } catch (error) {
-        // The output could not be copied to the gateway thread.
-        post({
-          type: "result",
-          id: message.id,
-          result: { ok: false, error: { code: "failed", message: errorMessage(error) } },
-        });
-      }
+    case "call":
+      reply(message.id, await call(message.tool, message.input));
       break;
-    }
+    case "action":
+      reply(message.id, await operate(message.op, message.actionId));
+      break;
+  }
+}
+
+function reply(id: number, result: CallResult): void {
+  try {
+    post({ type: "result", id, result });
+  } catch (error) {
+    // The output could not be copied to the gateway thread.
+    post({
+      type: "result",
+      id,
+      result: { ok: false, error: { code: "failed", message: errorMessage(error) } },
+    });
   }
 }
 

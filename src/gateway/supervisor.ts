@@ -3,7 +3,13 @@ import { z } from "zod";
 import type { Config } from "../config/schema.ts";
 import type { EventKindDescriptor, ToolDescriptor } from "../protocol/descriptors.ts";
 import type { EventOccurrence } from "../protocol/events.ts";
-import type { CallResult, CoreToGateway, GatewayToCore, Target } from "../protocol/messages.ts";
+import type {
+  ActionOperation,
+  CallResult,
+  CoreToGateway,
+  GatewayToCore,
+  Target,
+} from "../protocol/messages.ts";
 
 import { log } from "../log.ts";
 
@@ -108,6 +114,15 @@ export class Supervisor {
   }
 
   call(tool: string, input: unknown): Promise<CallResult> {
+    return this.#ask((id) => ({ type: "call", id, tool, input }));
+  }
+
+  // Reads, waits for, or cancels an action that a call added to the queue.
+  action(op: ActionOperation, actionId: string): Promise<CallResult> {
+    return this.#ask((id) => ({ type: "action", id, op, actionId }));
+  }
+
+  #ask(message: (id: number) => GatewayToCore): Promise<CallResult> {
     if (this.#worker === undefined || !this.#ready) {
       return Promise.resolve(unavailable);
     }
@@ -115,7 +130,7 @@ export class Supervisor {
     this.#nextCallId += 1;
     const { promise, resolve } = Promise.withResolvers<CallResult>();
     this.#pendingCalls.set(id, resolve);
-    this.#post(this.#worker, { type: "call", id, tool, input });
+    this.#post(this.#worker, message(id));
     return promise;
   }
 

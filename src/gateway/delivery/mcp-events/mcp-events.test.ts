@@ -6,7 +6,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
 
 import type { EventKindDescriptor } from "../../../protocol/descriptors.ts";
+import type { CallResult } from "../../../protocol/messages.ts";
 
+import { BlockingCalls } from "../../actions.ts";
 import { createServer } from "../../server.ts";
 import { EventLog } from "../event-log.ts";
 import { mcpEvents } from "./mcp-events.ts";
@@ -51,6 +53,9 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
+// A core that answers every call with nothing.
+const idle = (): Promise<CallResult> => Promise.resolve({ ok: true, output: null });
+
 // The official client talks to the real SDK server in this process. Nothing listens on a port.
 async function connect(era: "modern" | "legacy" = "modern") {
   const log = new EventLog(4);
@@ -58,9 +63,10 @@ async function connect(era: "modern" | "legacy" = "modern") {
   const handler = createMcpHandler((context) =>
     createServer(
       {
-        core: { tools: [], call: () => Promise.resolve({ ok: true, output: null }) },
+        core: { tools: [], call: idle, action: idle },
         log,
         deliveries,
+        calls: new BlockingCalls(),
       },
       context.era,
     ),
@@ -132,7 +138,7 @@ describe("mcp-events", () => {
   test("declares the extension to a client of the 2026-07-28 revision", async () => {
     const { client } = await connect();
 
-    expect(client.getServerCapabilities()?.extensions).toEqual({ [extension]: {} });
+    expect(client.getServerCapabilities()?.extensions?.[extension]).toEqual({});
   });
 
   test("stays out of the way of a client of an earlier revision", async () => {
@@ -142,7 +148,7 @@ describe("mcp-events", () => {
       client.request({ method: "events/list", params: {} }, z.looseObject({})),
     );
 
-    expect(client.getServerCapabilities()?.extensions).toBeUndefined();
+    expect(client.getServerCapabilities()?.extensions?.[extension]).toBeUndefined();
     expect(error).toMatchObject({ code: -32_601 });
   });
 

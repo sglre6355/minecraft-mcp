@@ -21,7 +21,11 @@ export type GatewayToCore =
   // `rejoin` is the server the core before this one was meant to be in.
   | { type: "init"; config: Config; rejoin: Target | null }
   | { type: "ping" }
-  | { type: "call"; id: number; tool: string; input: unknown };
+  | { type: "call"; id: number; tool: string; input: unknown }
+  // `wait` responds once the action has ended. `cancel` responds immediately.
+  | { type: "action"; id: number; op: ActionOperation; actionId: string };
+
+export type ActionOperation = "get" | "wait" | "cancel";
 
 export type CoreToGateway =
   | { type: "ready"; tools: Array<ToolDescriptor>; eventKinds: Array<EventKindDescriptor> }
@@ -47,5 +51,7 @@ export type CallErrorCode =
   | "failed"
   | "busy"
   | "interrupted"
+  | "canceled"
+  | "skipped"
   | "unknown_action"
   | "core_unavailable";

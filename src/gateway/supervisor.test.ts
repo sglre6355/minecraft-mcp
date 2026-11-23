@@ -57,6 +57,15 @@ describe("Supervisor", () => {
     expect(result).toEqual({ ok: true, output: '{"text":"hi"}' });
   });
 
+  test("passes an operation on an action to the core and returns its result", async () => {
+    const { supervisor } = create();
+    await supervisor.start();
+
+    const result = await supervisor.action("cancel", "a1");
+
+    expect(result).toEqual({ ok: true, output: { op: "cancel", actionId: "a1" } });
+  });
+
   test("hands core events to the listener", async () => {
     const { supervisor, events } = create();
     await supervisor.start();

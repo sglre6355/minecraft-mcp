@@ -5,6 +5,7 @@ import type { Delivery } from "./delivery/delivery.ts";
 import type { ServerParts } from "./server.ts";
 
 import { log } from "../log.ts";
+import { BlockingCalls } from "./actions.ts";
 import { createAuthGate } from "./auth.ts";
 import { EventLog } from "./delivery/event-log.ts";
 import { mcpEvents } from "./delivery/mcp-events/mcp-events.ts";
@@ -48,6 +49,7 @@ export async function serve({ config, token }: ServeOptions): Promise<Running> {
     core: supervisor,
     log: events,
     deliveries: [...new Set(config.delivery)].map((name) => createDelivery(name, supervisor)),
+    calls: new BlockingCalls(),
   };
   try {
     // A tool name claimed twice fails here, at startup, instead of on every request.
@@ -58,11 +60,14 @@ export async function serve({ config, token }: ServeOptions): Promise<Running> {
     throw error;
   }
 
-  const handler = createMcpHandler((context) => createServer(parts, context.era), {
-    onerror: (error) => {
-      log("error", "mcp", error.message);
+  const handler = createMcpHandler(
+    (context) => createServer(parts, context.era, context.requestInfo),
+    {
+      onerror: (error) => {
+        log("error", "mcp", error.message);
+      },
     },
-  });
+  );
   const gate = createAuthGate(token);
 
   const http = Bun.serve({

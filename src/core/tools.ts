@@ -6,9 +6,8 @@ import { z } from "zod";
 import type { Config } from "../config/schema.ts";
 import type { JsonSchema, ToolDescriptor } from "../protocol/descriptors.ts";
 import type { CallResult, Target } from "../protocol/messages.ts";
-import type { ActionReport, ActionRunner } from "./action-runner.ts";
+import type { ActionRunner } from "./action-runner.ts";
 import type { ActionDefinition } from "./actions/action.ts";
-import type { BodyHolder } from "./body.ts";
 import type { CommandDefinition } from "./commands/command.ts";
 import type { Emit } from "./events/event.ts";
 import type { Registry } from "./plugins.ts";
@@ -32,6 +31,8 @@ export interface ToolParts {
   presence: Presence<Target>;
   // The bot while it is in a Minecraft server.
   bot: () => Bot | undefined;
+  // `connect` responds after this much time, even if the bot is still joining.
+  connectWaitMs: number;
 }
 
 // Every tool the agent can call, by name.
@@ -46,12 +47,7 @@ export function buildTools(parts: ToolParts): Map<string, Tool> {
   for (const action of parts.registry.actions.values()) {
     tools.set(action.name, actionTool(action, parts));
   }
-  const fixed = [
-    connectTool(parts),
-    disconnectTool(parts.presence),
-    actionStatus(parts.runner),
-    cancelAction(parts.runner),
-  ];
+  const fixed = [connectTool(parts), disconnectTool(parts.presence)];
   for (const tool of fixed) {
     if (tools.has(tool.descriptor.name)) {
       throw new Error(`The tool name "${tool.descriptor.name}" is reserved`);
@@ -101,7 +97,7 @@ const connectInput = z.strictObject({
     ),
 });
 
-function connectTool({ presence, config, bot }: ToolParts): Tool {
+function connectTool({ presence, bot, connectWaitMs }: ToolParts): Tool {
   return {
     descriptor: {
       kind: "control",
@@ -128,7 +124,7 @@ function connectTool({ presence, config, bot }: ToolParts): Tool {
         };
       }
 
-      const outcome = await within(presence.connect(target), config.actions.waitMs);
+      const outcome = await within(presence.connect(target), connectWaitMs);
       if (outcome === undefined || outcome.state === "connected") {
         // The name in the game, which Microsoft sign-in takes from the account.
         return { ok: true, output: { state: presence.state, username: bot()?.username ?? null } };
@@ -263,16 +259,20 @@ function actionTool(
       if (!parsed.success) {
         return invalidInput(z.prettifyError(parsed.error));
       }
-      const current = bot();
-      if (current === undefined) {
+      if (bot() === undefined) {
         return notConnected(presence.state);
       }
 
-      const result = await runner.start({
+      // The action may wait in the queue, so it uses the current bot when it starts.
+      const result = runner.enqueue({
         name: action.name,
         suppressReflexes,
-        run: ({ signal, progress }) =>
-          action.run(
+        run: ({ signal, progress }) => {
+          const current = bot();
+          if (current === undefined) {
+            throw new Error(whyNotConnected[presence.state]);
+          }
+          return action.run(
             {
               bot: current,
               signal,
@@ -290,112 +290,19 @@ function actionTool(
               },
             },
             parsed.data,
-          ),
-      });
-      return result.started ? reported(result.report) : busy(result.heldBy, runner);
-    },
-  };
-}
-
-function reported(report: ActionReport): CallResult {
-  switch (report.status) {
-    case "running":
-    case "completed":
-      return { ok: true, output: report };
-    case "failed":
-      return { ok: false, error: { code: "failed", message: report.message, details: report } };
-    case "interrupted": {
-      const by = report.reflex === null ? report.by : `the reflex "${report.reflex}"`;
-      return {
-        ok: false,
-        error: {
-          code: "interrupted",
-          message: `The action was interrupted by ${by}.`,
-          details: report,
+          );
         },
-      };
-    }
-  }
-}
-
-function busy(heldBy: BodyHolder, runner: ActionRunner): CallResult {
-  if (heldBy.kind === "reflex") {
-    return {
-      ok: false,
-      error: {
-        code: "busy",
-        message: `The reflex "${heldBy.name}" has the body. Wait for it to end, or name it in ${suppressionKey} to take the body from it.`,
-        details: { reflex: heldBy.name },
-      },
-    };
-  }
-  const name = runner.report(heldBy.id)?.name ?? null;
-  return {
-    ok: false,
-    error: {
-      code: "busy",
-      message: `The action ${heldBy.id} has the body. Wait for it, or stop it with cancel_action.`,
-      details: { actionId: heldBy.id, name },
-    },
-  };
-}
-
-function unknownAction(actionId: string | undefined): CallResult {
-  return {
-    ok: false,
-    error: {
-      code: "unknown_action",
-      message:
-        actionId === undefined ? "No action has run yet." : `No action has the ID "${actionId}".`,
-    },
-  };
-}
-
-const statusInput = z.object({
-  actionId: z.string().optional().describe("Defaults to the latest action."),
-});
-
-function actionStatus(runner: ActionRunner): Tool {
-  return {
-    descriptor: {
-      kind: "query",
-      name: "action_status",
-      description:
-        "Report whether an action is running, completed, failed or interrupted, with its progress or output.",
-      inputSchema: z.toJSONSchema(statusInput, { io: "input" }),
-    },
-    call(input) {
-      const parsed = statusInput.safeParse(input);
-      if (!parsed.success) {
-        return Promise.resolve(invalidInput(z.prettifyError(parsed.error)));
+      });
+      if (!result.accepted) {
+        return {
+          ok: false,
+          error: {
+            code: "busy",
+            message: `${result.waiting} actions are already waiting. Wait for some of them to end.`,
+          },
+        };
       }
-      const report = runner.report(parsed.data.actionId);
-      return Promise.resolve(
-        report === undefined ? unknownAction(parsed.data.actionId) : { ok: true, output: report },
-      );
-    },
-  };
-}
-
-const cancelInput = z.object({ actionId: z.string() });
-
-function cancelAction(runner: ActionRunner): Tool {
-  return {
-    descriptor: {
-      kind: "control",
-      name: "cancel_action",
-      description: "Stop a running action and report how it ended.",
-      inputSchema: z.toJSONSchema(cancelInput, { io: "input" }),
-    },
-    async call(input) {
-      const parsed = cancelInput.safeParse(input);
-      if (!parsed.success) {
-        return invalidInput(z.prettifyError(parsed.error));
-      }
-      const report = await runner.cancel(parsed.data.actionId);
-      return report === undefined
-        ? unknownAction(parsed.data.actionId)
-        : { ok: true, output: report };
+      return { ok: true, output: result.report };
     },
   };
 }

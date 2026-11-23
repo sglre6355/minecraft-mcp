@@ -72,5 +72,12 @@ self.addEventListener("message", (event: MessageEvent<GatewayToCore>) => {
         result: { ok: true, output: JSON.stringify(message.input) },
       });
       break;
+    case "action":
+      post({
+        type: "result",
+        id: message.id,
+        result: { ok: true, output: { op: message.op, actionId: message.actionId } },
+      });
+      break;
   }
 });

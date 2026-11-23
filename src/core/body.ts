@@ -36,6 +36,11 @@ export class Body {
     return this.#current?.holder;
   }
 
+  // Resolves when the current holder releases the body, or immediately if no one holds it.
+  free(): Promise<void> {
+    return this.#current?.released ?? Promise.resolve();
+  }
+
   async acquireForAction(
     id: string,
     suppressedReflexes: ReadonlyArray<string>,

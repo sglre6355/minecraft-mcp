@@ -1,30 +1,36 @@
-import type {
-  CallToolResult,
-  ProtocolEra,
-  StandardSchemaWithJSON,
-} from "@modelcontextprotocol/server";
+import type { ProtocolEra, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 
 import { McpServer } from "@modelcontextprotocol/server";
 
 import type { JsonSchema, ToolDescriptor } from "../protocol/descriptors.ts";
-import type { CallResult } from "../protocol/messages.ts";
+import type { ActionCore, BlockingCalls } from "./actions.ts";
 import type { Delivery } from "./delivery/delivery.ts";
 import type { EventLog } from "./delivery/event-log.ts";
 
-export interface CoreTools {
+import { attachTasks, callAction, toToolResult } from "./actions.ts";
+
+export interface CoreTools extends ActionCore {
   readonly tools: Array<ToolDescriptor>;
-  call(tool: string, input: unknown): Promise<CallResult>;
 }
 
 export interface ServerParts {
   core: CoreTools;
   log: EventLog;
   deliveries: Array<Delivery>;
+  calls: BlockingCalls;
 }
 
-// Builds the server for one request. `era` is the protocol era of that request.
-export function createServer({ core, log, deliveries }: ServerParts, era: ProtocolEra): McpServer {
-  const server = new McpServer({ name: "minecraft-mcp", version: "0.0.0" });
+const instructions =
+  "Actions run one at a time, in the order they were called. An action called while another is running waits its turn. When an action does not complete, the actions waiting behind it are skipped.";
+
+// Builds the server for one request. `era` is the request's protocol era, and `request` is the
+// HTTP request, if there is one.
+export function createServer(
+  { core, log, deliveries, calls }: ServerParts,
+  era: ProtocolEra,
+  request?: Request,
+): McpServer {
+  const server = new McpServer({ name: "minecraft-mcp", version: "0.0.0" }, { instructions });
 
   for (const tool of core.tools) {
     server.registerTool(
@@ -34,9 +40,13 @@ export function createServer({ core, log, deliveries }: ServerParts, era: Protoc
         inputSchema: describedBy(tool.inputSchema),
         annotations: { readOnlyHint: tool.kind === "query" },
       },
-      async (input) => toToolResult(await core.call(tool.name, input)),
+      async (input, context) =>
+        tool.kind === "action"
+          ? callAction(core, calls, tool.name, input, context, request)
+          : toToolResult(await core.call(tool.name, input)),
     );
   }
+  attachTasks(server, core, calls, era);
   for (const delivery of deliveries) {
     delivery.attach(server, log, era);
   }
@@ -65,14 +75,4 @@ function describedBy(schema: JsonSchema): StandardSchemaWithJSON {
       jsonSchema: { input: () => schema, output: () => schema },
     },
   };
-}
-
-function toToolResult(result: CallResult): CallToolResult {
-  if (!result.ok) {
-    return {
-      isError: true,
-      content: [{ type: "text", text: JSON.stringify(result.error) }],
-    };
-  }
-  return { content: [{ type: "text", text: JSON.stringify(result.output) }] };
 }

@@ -25,7 +25,7 @@ export const goToPlayer = defineAction({
 export const followPlayer = defineAction({
   name: "follow_player",
   description:
-    "Keep following a player the bot can see. It never completes. Stop it with cancel_action.",
+    "Keep following a player the bot can see. This action never completes. Cancel it to stop.",
   input: z.object({ username, range }),
   progress: z.object({
     distance: z.number().describe("Blocks to the player."),
