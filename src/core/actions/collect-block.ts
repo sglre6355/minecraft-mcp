@@ -3,7 +3,7 @@ import type { Bot } from "mineflayer";
 import { plugin as collectBlockPlugin } from "mineflayer-collectblock";
 import { z } from "zod";
 
-import { blockNamed, countByName, gained } from "../items.ts";
+import { blockNamed, gained, list, listed, listedNote } from "../items.ts";
 import { stoppable, within } from "../wait.ts";
 import { defineAction } from "./action.ts";
 import { equipToolFor } from "./break-block.ts";
@@ -45,8 +45,7 @@ const perBlockMs = 60_000;
 
 export const collectBlock = defineAction({
   name: "collect_block",
-  description:
-    "Gather blocks of one kind. For each, walks to the nearest one, breaks it with the best tool the bot carries and picks up what drops. On the way it breaks blocks that block its path.",
+  description: `Gather blocks of one kind. For each, walks to the nearest one, breaks it with the best tool the bot carries and picks up what drops. On the way it breaks blocks that block its path. \`gained\` lists the stacks the bot picked up. ${listedNote}`,
   input: z.object({
     block: z.string().describe("The name of the block, such as oak_log."),
     count: z.int().min(1).max(64).default(1).describe("How many blocks to gather."),
@@ -81,7 +80,7 @@ export const collectBlock = defineAction({
       void bot.collectBlock.cancelTask();
     };
     const tried = new Set<string>();
-    const before = countByName(bot.inventory.items());
+    const before = list(bot.inventory.items().map(listed));
     let problem = `No ${input.block} is within ${input.range} blocks.`;
     let collected = 0;
 
@@ -148,7 +147,7 @@ export const collectBlock = defineAction({
     return {
       collected,
       wanted: input.count,
-      gained: gained(before, countByName(bot.inventory.items())),
+      gained: gained(before, list(bot.inventory.items().map(listed))),
     };
   },
 });

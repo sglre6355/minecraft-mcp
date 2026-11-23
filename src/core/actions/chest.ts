@@ -2,7 +2,7 @@ import type { Bot } from "mineflayer";
 
 import { z } from "zod";
 
-import { countByName, countOf, itemNamed } from "../items.ts";
+import { countByName, countOf, itemNamed, list, listed, listedNote } from "../items.ts";
 import { within } from "../wait.ts";
 import { defineAction } from "./action.ts";
 import { approach, blockAt, nearestBlock } from "./reach.ts";
@@ -86,11 +86,11 @@ async function withChest<Result>(
 
 export const viewChest = defineAction({
   name: "view_chest",
-  description: `Walk to a container, open it and list what is inside. ${kinds}`,
+  description: `Walk to a container, open it and list what is inside. ${kinds} ${listedNote}`,
   input: z.object(position).refine(whole, wholeMessage),
   run: ({ bot, signal }, input) =>
     withChest(bot, signal, input, (chest) =>
-      Promise.resolve({ items: countByName(chest.containerItems()) }),
+      Promise.resolve({ items: list(chest.containerItems().map(listed)) }),
     ),
 });
 
