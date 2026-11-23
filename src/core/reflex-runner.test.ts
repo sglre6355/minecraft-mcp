@@ -199,7 +199,7 @@ describe("ReflexRunner", () => {
 
     const queued = await begin(actionRunner, holding());
 
-    expect(actionRunner.report(queued.actionId)).toMatchObject({ status: "queued", ahead: 0 });
+    expect(actionRunner.report(queued.actionId)).toMatchObject({ status: "queued", ahead: [] });
     expect(body.holder).toEqual({ kind: "reflex", name: "drowning" });
 
     act.resolve();

@@ -25,16 +25,17 @@ export interface ActionCore {
   action(op: ActionOperation, actionId: string): Promise<CallResult>;
 }
 
+const actionRef = z.object({ actionId: z.string(), name: z.string() });
+
 const identity = {
-  actionId: z.string(),
-  name: z.string(),
+  ...actionRef.shape,
   createdAt: z.string(),
   lastUpdatedAt: z.string(),
 };
 
 // What the core reports about an action.
 const actionReport = z.discriminatedUnion("status", [
-  z.object({ ...identity, status: z.literal("queued"), ahead: z.int() }),
+  z.object({ ...identity, status: z.literal("queued"), ahead: z.array(actionRef) }),
   z.object({
     ...identity,
     status: z.literal("running"),
@@ -50,7 +51,7 @@ const actionReport = z.discriminatedUnion("status", [
     stopped: z.boolean(),
   }),
   z.object({ ...identity, status: z.literal("canceled"), stopped: z.boolean() }),
-  z.object({ ...identity, status: z.literal("skipped"), after: z.string() }),
+  z.object({ ...identity, status: z.literal("skipped"), after: actionRef }),
 ]);
 
 type ActionReport = z.infer<typeof actionReport>;
@@ -118,10 +119,25 @@ function endOf(report: ActionReport): CallToolResult {
     case "skipped":
       return failure({
         code: "skipped",
-        message: `The action did not run because the preceding action ${report.after} did not complete.`,
+        message: `The action was skipped because the previous action ${report.after.name} (${report.after.actionId}) did not complete.`,
         details: { after: report.after },
       });
   }
+}
+
+// Names only the action at the front of the line and counts the rest because the message is
+// sent again on each poll. If no actions are ahead, this action waits for a reflex to give up
+// control of the bot's body.
+function waitingFor(ahead: Array<z.infer<typeof actionRef>>): string {
+  const [nearest, ...rest] = ahead;
+  if (nearest === undefined) {
+    return "Waiting for a reflex to finish.";
+  }
+  const others =
+    rest.length === 0
+      ? ""
+      : ` and ${rest.length} other ${rest.length === 1 ? "action" : "actions"}`;
+  return `Waiting for ${nearest.name} (${nearest.actionId})${others} to finish.`;
 }
 
 // The task representing an action, as returned by `tasks/get`.
@@ -135,11 +151,7 @@ function taskOf(report: ActionReport) {
   };
   switch (report.status) {
     case "queued":
-      return {
-        ...task,
-        status: "working",
-        statusMessage: `Waiting for ${report.ahead} ${report.ahead === 1 ? "action" : "actions"} to end first.`,
-      };
+      return { ...task, status: "working", statusMessage: waitingFor(report.ahead) };
     case "running":
       return {
         ...task,

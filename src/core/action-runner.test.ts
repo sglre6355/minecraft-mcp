@@ -125,7 +125,11 @@ describe("ActionRunner", () => {
 
     const waiting = accepted(runner.enqueue(request(() => Promise.resolve("second"), "equip")));
 
-    expect(waiting).toMatchObject({ name: "equip", status: "queued", ahead: 1 });
+    expect(waiting).toMatchObject({
+      name: "equip",
+      status: "queued",
+      ahead: [{ actionId: running.actionId, name: "move_to" }],
+    });
     expect(body.holder).toEqual({ kind: "action", id: running.actionId });
 
     first.outcome.resolve("first");
@@ -134,14 +138,20 @@ describe("ActionRunner", () => {
     expect(runner.report(running.actionId)).toMatchObject({ status: "completed" });
   });
 
-  test("counts the actions ahead of a queued one", () => {
+  test("lists the actions ahead of a queued one in the order they will run", () => {
     const { runner } = create();
-    accepted(runner.enqueue(request(controllable().run)));
-    accepted(runner.enqueue(request(controllable().run)));
+    const first = accepted(runner.enqueue(request(controllable().run)));
+    const second = accepted(runner.enqueue(request(controllable().run, "smelt")));
 
     const third = accepted(runner.enqueue(request(controllable().run)));
 
-    expect(third).toMatchObject({ status: "queued", ahead: 2 });
+    expect(third).toMatchObject({
+      status: "queued",
+      ahead: [
+        { actionId: first.actionId, name: "move_to" },
+        { actionId: second.actionId, name: "smelt" },
+      ],
+    });
   });
 
   test("skips every queued action when the one before it fails", async () => {
@@ -155,11 +165,11 @@ describe("ActionRunner", () => {
 
     expect(await end(runner, second)).toMatchObject({
       status: "skipped",
-      after: failing.actionId,
+      after: { actionId: failing.actionId, name: "move_to" },
     });
     expect(await end(runner, third)).toMatchObject({
       status: "skipped",
-      after: failing.actionId,
+      after: { actionId: failing.actionId, name: "move_to" },
     });
     expect(body.holder).toBeUndefined();
   });
@@ -220,7 +230,10 @@ describe("ActionRunner", () => {
     runner.cancel(report.actionId);
 
     expect(await end(runner, report)).toMatchObject({ status: "canceled", stopped: true });
-    expect(await end(runner, behind)).toMatchObject({ status: "skipped", after: report.actionId });
+    expect(await end(runner, behind)).toMatchObject({
+      status: "skipped",
+      after: { actionId: report.actionId },
+    });
     expect(body.holder).toBeUndefined();
   });
 
@@ -235,7 +248,10 @@ describe("ActionRunner", () => {
 
     expect(await end(runner, queued)).toMatchObject({ status: "canceled", stopped: true });
     expect(runner.report(running.actionId)).toMatchObject({ status: "running" });
-    expect(runner.report(last.actionId)).toMatchObject({ status: "queued", ahead: 1 });
+    expect(runner.report(last.actionId)).toMatchObject({
+      status: "queued",
+      ahead: [{ actionId: running.actionId }],
+    });
 
     action.outcome.resolve(null);
     expect(await end(runner, last)).toMatchObject({ status: "completed", output: "last" });
@@ -273,7 +289,10 @@ describe("ActionRunner", () => {
       reflex: "drowning",
       stopped: true,
     });
-    expect(await end(runner, behind)).toMatchObject({ status: "skipped", after: report.actionId });
+    expect(await end(runner, behind)).toMatchObject({
+      status: "skipped",
+      after: { actionId: report.actionId },
+    });
   });
 
   test("waits for a reflex that holds the body before it starts an action", async () => {
@@ -286,7 +305,7 @@ describe("ActionRunner", () => {
     const report = accepted(runner.enqueue(request(() => Promise.resolve("after"))));
     await Bun.sleep(5);
 
-    expect(runner.report(report.actionId)).toMatchObject({ status: "queued", ahead: 0 });
+    expect(runner.report(report.actionId)).toMatchObject({ status: "queued", ahead: [] });
 
     grant.lease.release();
 
@@ -335,7 +354,10 @@ describe("ActionRunner", () => {
     runner.died();
 
     expect(await end(runner, report)).toMatchObject({ status: "interrupted", by: "death" });
-    expect(await end(runner, behind)).toMatchObject({ status: "skipped", after: report.actionId });
+    expect(await end(runner, behind)).toMatchObject({
+      status: "skipped",
+      after: { actionId: report.actionId },
+    });
     expect(body.holder).toBeUndefined();
   });
 

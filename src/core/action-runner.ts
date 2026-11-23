@@ -6,7 +6,9 @@ import { aborted, within } from "./wait.ts";
 
 type Interrupter = "reflex" | "death" | "disconnect";
 
-type Identity = { actionId: string; name: string; createdAt: string; lastUpdatedAt: string };
+type ActionRef = { actionId: string; name: string };
+
+type Identity = ActionRef & { createdAt: string; lastUpdatedAt: string };
 
 type Outcome = { status: "completed"; output: JsonValue } | { status: "failed"; message: string };
 
@@ -16,11 +18,16 @@ type End =
   | Outcome
   | { status: "interrupted"; by: Interrupter; reflex: string | null; stopped: boolean }
   | { status: "canceled"; stopped: boolean }
-  | { status: "skipped"; after: string };
+  | { status: "skipped"; after: ActionRef };
 
-// `ahead` counts the running or waiting actions ahead of a queued action.
+// `ahead` lists actions ahead of this action in the order they will run, from the action
+// running now or about to run to the action directly ahead of this one.
 export type ActionReport = Identity &
-  ({ status: "queued"; ahead: number } | { status: "running"; progress: JsonObject | null } | End);
+  (
+    | { status: "queued"; ahead: Array<ActionRef> }
+    | { status: "running"; progress: JsonObject | null }
+    | End
+  );
 
 export interface ActionControl {
   // Aborts when the agent cancels, a reflex takes the body, or the bot dies or disconnects.
@@ -157,7 +164,10 @@ export class ActionRunner {
       return { ...identity, status: "running", progress: entry.progress };
     }
     const place = this.#queue.indexOf(entry);
-    const ahead = place === -1 ? 0 : place + (this.#head === undefined ? 0 : 1);
+    const before = place === -1 ? [] : [this.#head, ...this.#queue.slice(0, place)];
+    const ahead = before
+      .filter((other) => other !== undefined)
+      .map((other) => ({ actionId: other.id, name: other.request.name }));
     return { ...identity, status: "queued", ahead };
   }
 
@@ -248,7 +258,10 @@ export class ActionRunner {
       const skipped = this.#queue;
       this.#queue = [];
       for (const waiting of skipped) {
-        this.#settle(waiting, { status: "skipped", after: entry.id });
+        this.#settle(waiting, {
+          status: "skipped",
+          after: { actionId: entry.id, name: entry.request.name },
+        });
       }
     }
     this.#next();

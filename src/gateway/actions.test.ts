@@ -166,8 +166,13 @@ describe("an action for a client that takes tasks", () => {
     });
   }
 
-  test("says how many actions wait ahead of a queued one", async () => {
-    const queued = { actionId: "a1", name: "move_to", ...times, status: "queued", ahead: 2 };
+  test("names the action at the front of the line and counts the remaining actions ahead of a queued one", async () => {
+    const ahead = [
+      { actionId: "a0", name: "collect_block" },
+      { actionId: "a9", name: "smelt" },
+      { actionId: "a8", name: "equip" },
+    ];
+    const queued = { actionId: "a1", name: "move_to", ...times, status: "queued", ahead };
     const { core } = fakeCore({ ok: true, output: queued });
     const { send } = serve(core);
 
@@ -175,7 +180,20 @@ describe("an action for a client that takes tasks", () => {
 
     expect(result).toMatchObject({
       status: "working",
-      statusMessage: "Waiting for 2 actions to end first.",
+      statusMessage: "Waiting for collect_block (a0) and 2 other actions to finish.",
+    });
+  });
+
+  test("says a queued action with nothing ahead waits for a reflex", async () => {
+    const queued = { actionId: "a1", name: "move_to", ...times, status: "queued", ahead: [] };
+    const { core } = fakeCore({ ok: true, output: queued });
+    const { send } = serve(core);
+
+    const { result } = await send("modern", callMoveTo());
+
+    expect(result).toMatchObject({
+      status: "working",
+      statusMessage: "Waiting for a reflex to finish.",
     });
   });
 
@@ -198,7 +216,8 @@ describe("an action for a client that takes tasks", () => {
   test("ends a task that failed as completed with an error result", async () => {
     const { core, finish } = fakeCore();
     const { send } = serve(core);
-    finish({ ...running, status: "skipped", after: "a0" });
+    const after = { actionId: "a0", name: "collect_block" };
+    finish({ ...running, status: "skipped", after });
 
     const { result } = await send("legacy", {
       id: 2,
@@ -211,7 +230,12 @@ describe("an action for a client that takes tasks", () => {
 
     expect(result).toMatchObject({ status: "completed" });
     expect(toolResult.isError).toBe(true);
-    expect(textOf(toolResult)).toMatchObject({ code: "skipped", details: { after: "a0" } });
+    expect(textOf(toolResult)).toMatchObject({
+      code: "skipped",
+      message:
+        "The action was skipped because the previous action collect_block (a0) did not complete.",
+      details: { after },
+    });
   });
 
   test("cancels a task and reports it as canceled afterwards", async () => {
