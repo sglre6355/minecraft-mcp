@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isContainer } from "./chest.ts";
+import { isContainer } from "./container.ts";
 
 describe("isContainer", () => {
   test("holds for chests and barrels", () => {

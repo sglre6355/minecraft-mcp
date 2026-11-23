@@ -45,16 +45,16 @@ const whole = (input: { x?: number; y?: number; z?: number }) =>
 const wholeMessage =
   "Give all of x, y and z to name a container, or none for the nearest chest or barrel.";
 
-type Chest = Awaited<ReturnType<Bot["openContainer"]>>;
+type Container = Awaited<ReturnType<Bot["openContainer"]>>;
 
 // Walks to a container, opens it, does the work and closes it again. The work gets the open
 // container and the name of its block.
-async function withChest<Result>(
+async function withContainer<Result>(
   bot: Bot,
   signal: AbortSignal,
   at: { x?: number; y?: number; z?: number },
-  work: (chest: Chest, name: string) => Promise<Result>,
-): Promise<Result & { chest: { x: number; y: number; z: number } }> {
+  work: (container: Container, name: string) => Promise<Result>,
+): Promise<Result & { container: { x: number; y: number; z: number } }> {
   const block =
     at.x !== undefined && at.y !== undefined && at.z !== undefined
       ? blockAt(bot, at.x, at.y, at.z)
@@ -69,35 +69,35 @@ async function withChest<Result>(
     );
   }
   await approach(bot, block.position, signal, openReach);
-  const chest = await within(bot.openContainer(block), openMs);
-  if (chest === undefined) {
+  const container = await within(bot.openContainer(block), openMs);
+  if (container === undefined) {
     throw new Error(
       `The ${block.name} at ${x}, ${y}, ${zCoordinate} did not open. A block on its lid keeps a container shut.`,
     );
   }
   try {
     signal.throwIfAborted();
-    const result = await work(chest, block.name);
-    return { ...result, chest: { x, y, z: zCoordinate } };
+    const result = await work(container, block.name);
+    return { ...result, container: { x, y, z: zCoordinate } };
   } finally {
-    await chest.close();
+    await container.close();
   }
 }
 
-export const viewChest = defineAction({
-  name: "view_chest",
+export const viewContainer = defineAction({
+  name: "view_container",
   description: `Walk to a container, open it and list what is inside. ${kinds} ${listedNote}`,
   input: z.object(position).refine(whole, wholeMessage),
   run: ({ bot, signal }, input) =>
-    withChest(bot, signal, input, (chest) =>
-      Promise.resolve({ items: list(chest.containerItems().map(listed)) }),
+    withContainer(bot, signal, input, (container) =>
+      Promise.resolve({ items: list(container.containerItems().map(listed)) }),
     ),
 });
 
 const count = z.int().min(1).optional();
 
-export const putInChest = defineAction({
-  name: "put_in_chest",
+export const putInContainer = defineAction({
+  name: "put_in_container",
   description: `Walk to a container and put items from the inventory into it. ${kinds}`,
   input: z
     .object({
@@ -113,15 +113,15 @@ export const putInChest = defineAction({
       throw new Error(`The bot carries ${have} ${input.item}.`);
     }
     const put = input.count ?? have;
-    return withChest(bot, signal, input, async (chest) => {
-      await chest.deposit(id, null, put);
+    return withContainer(bot, signal, input, async (container) => {
+      await container.deposit(id, null, put);
       return { put, item: input.item };
     });
   },
 });
 
-export const takeFromChest = defineAction({
-  name: "take_from_chest",
+export const takeFromContainer = defineAction({
+  name: "take_from_container",
   description: `Walk to a container and take items out of it. ${kinds}`,
   input: z
     .object({
@@ -132,14 +132,15 @@ export const takeFromChest = defineAction({
     .refine(whole, wholeMessage),
   run({ bot, signal }, input) {
     const { id } = itemNamed(bot, input.item);
-    return withChest(bot, signal, input, async (chest, name) => {
+    return withContainer(bot, signal, input, async (container, name) => {
       const inside =
-        countByName(chest.containerItems()).find((stack) => stack.name === input.item)?.count ?? 0;
+        countByName(container.containerItems()).find((stack) => stack.name === input.item)?.count ??
+        0;
       if (inside < (input.count ?? 1)) {
         throw new Error(`The ${name} holds ${inside} ${input.item}.`);
       }
       const took = input.count ?? inside;
-      await chest.withdraw(id, null, took);
+      await container.withdraw(id, null, took);
       return { took, item: input.item };
     });
   },
