@@ -16,6 +16,7 @@ import { damage } from "./events/damage.ts";
 import { hunger } from "./events/hunger.ts";
 import { life } from "./events/life.ts";
 import { oxygen } from "./events/oxygen.ts";
+import { screen } from "./events/screen.ts";
 import { definePlugin } from "./plugin-api.ts";
 import { blockAt } from "./queries/block-at.ts";
 import { craftable } from "./queries/craftable.ts";
@@ -64,5 +65,5 @@ export const builtin = definePlugin({
   ],
   commands: [say],
   reflexes: [drowning],
-  eventSources: [chat, damage, oxygen, hunger, life],
+  eventSources: [chat, screen, damage, oxygen, hunger, life],
 });
