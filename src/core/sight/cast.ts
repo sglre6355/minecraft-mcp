@@ -336,3 +336,34 @@ export function inView(eye: Vector, at: Vector, range: number, cellAt: CellAt): 
   }
   return false;
 }
+
+// Whether a straight line from the eye reaches a point before a block ends it.
+export function reaches(eye: Vector, point: Vector, cellAt: CellAt): boolean {
+  const length = Math.hypot(point.x - eye.x, point.y - eye.y, point.z - eye.z);
+  if (length === 0) {
+    return true;
+  }
+  const direction = {
+    x: (point.x - eye.x) / length,
+    y: (point.y - eye.y) / length,
+    z: (point.z - eye.z) / length,
+  };
+  const { hits, unloaded } = cast(eye, direction, length, cellAt);
+  if (unloaded) {
+    return false;
+  }
+  let veils = 0;
+  for (const hit of hits) {
+    const found = cellAt(hit.x, hit.y, hit.z);
+    if (typeof found === "string") {
+      continue;
+    }
+    if (found.sight === "ends") {
+      return false;
+    }
+    if (found.sight === "veils") {
+      veils += 1;
+    }
+  }
+  return veils < veilLimit;
+}

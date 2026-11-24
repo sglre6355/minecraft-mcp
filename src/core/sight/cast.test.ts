@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Cell, Shape } from "./cast.ts";
 
-import { cast, inView, surrounding } from "./cast.ts";
+import { cast, inView, reaches, surrounding } from "./cast.ts";
 
 const full: Array<Shape> = [[0, 0, 0, 1, 1, 1]];
 
@@ -328,6 +328,35 @@ describe("inView", () => {
 
   test("fails where the world between is not loaded", () => {
     expect(inView(viewer, { x: 8, y: 1, z: 0 }, 16, loadedUpTo4)).toBe(false);
+  });
+});
+
+describe("reaches", () => {
+  const point = { x: 6.5, y: 1.5, z: 0.5 };
+
+  test("holds for a point in the open", () => {
+    expect(reaches(eye, point, world({}))).toBe(true);
+  });
+
+  test("fails for a point behind a block that ends sight", () => {
+    expect(reaches(eye, point, world({ "3,1,0": stone }))).toBe(false);
+  });
+
+  test("holds for a point behind glass and water", () => {
+    expect(reaches(eye, point, world({ "2,1,0": glass, "4,1,0": water }))).toBe(true);
+  });
+
+  test("holds for a point behind one block of leaves and fails behind two", () => {
+    expect(reaches(eye, point, world({ "3,1,0": leaves }))).toBe(true);
+    expect(reaches(eye, point, world({ "2,1,0": leaves, "4,1,0": leaves }))).toBe(false);
+  });
+
+  test("holds for a point in front of a wall", () => {
+    expect(reaches(eye, point, world({ "7,1,0": stone }))).toBe(true);
+  });
+
+  test("fails where the world between is not loaded", () => {
+    expect(reaches(eye, point, loadedUpTo4)).toBe(false);
   });
 });
 
